@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "deep-diss"
+version = "0.1.0"
+description = ""
+authors = [
+    "Beyazit Yalcinkaya <beyazit@berkeley.edu>",
+    "Niklas Lauffer <nlauffer@berkeley.edu>",
+    "Marcell Vazquez-Chanlatte <mvc@linux.com>",
+]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+gym = "^0.21"
+gym-minigrid = "^1.0.1"
+attrs = "^22.1.0"
+funcy = "^1.17"
+ring = "^0.9.1"
+pydot = "^1.4.2"
+dill = "^0.3.6"
+networkx = "^2.8.7"
+#dfa = "^4.6.1"
+torch = "^1.13.0"
+#stable-baselines3 = "^1.6.2"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
