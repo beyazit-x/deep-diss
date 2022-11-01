@@ -19,9 +19,9 @@ ring = "^0.9.1"
 pydot = "^1.4.2"
 dill = "^0.3.6"
 networkx = "^2.8.7"
-#dfa = "^4.6.1"
 torch = "^1.13.0"
-#stable-baselines3 = "^1.6.2"
+dfa = "^4.6.1"
+stable-baselines3 = "^1.6.2"
 
 [tool.poetry.dev-dependencies]
 
