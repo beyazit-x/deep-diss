@@ -75,7 +75,7 @@ class DFAEnv(gym.Wrapper):
         self.dfa_goal = next_dfa_goal
         self.obs = next_obs
 
-        dfa_obs = {'features': self.obs,'dfa': self.get_binary_seq(self.dfa_goal)}
+        dfa_obs = {'features': self.obs, 'dfa': self.get_binary_seq(self.dfa_goal)}
 
         reward  = original_reward + dfa_reward
         done    = env_done or dfa_done
