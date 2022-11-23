@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn, Schedule, TrainFreq, TrainFrequencyUnit
 
 from diss_relabeler import DissRelabeler
+from diss_replay_buffer import DissReplayBuffer
 
 def learn_with_diss(
         model: OffPolicyAlgorithm,
@@ -95,6 +96,7 @@ model = DQN(
         features_extractor_class=CustomCombinedExtractor,
         features_extractor_kwargs=dict(env=env)
         ),
+    replay_buffer_class=DissReplayBuffer,
     verbose=1
     )
 print(model.policy)
