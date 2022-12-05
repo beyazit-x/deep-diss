@@ -97,9 +97,12 @@ model = DQN(
         features_extractor_kwargs=dict(env=env)
         ),
     replay_buffer_class=DissReplayBuffer,
+    replay_buffer_kwargs=dict(
+        max_episode_length=env.timeout,
+        her_replay_buffer_size=100
+        ),
     verbose=1
     )
-print(model.policy)
 
 learn_with_diss(model, total_timesteps=10000000)
 
