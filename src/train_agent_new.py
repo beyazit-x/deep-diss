@@ -99,7 +99,7 @@ model = DQN(
     replay_buffer_class=DissReplayBuffer,
     replay_buffer_kwargs=dict(
         max_episode_length=env.timeout,
-        her_replay_buffer_size=100
+        her_replay_buffer_size=10
         ),
     verbose=1
     )
