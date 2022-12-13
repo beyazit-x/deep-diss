@@ -42,13 +42,15 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
 
         self.env = env
         self.propositions = env.get_propositions()
-        self.prev_preprocessed_dfa = None
+        self.prev_preprocessed_dfas = None
 
         self.text_embedding_size = 32
         self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", max(FEATURE_SIZE, len(self.propositions) + 10), self.text_embedding_size)
 
         obs_space = {"image": observation_space.spaces["features"].shape, "text": max(FEATURE_SIZE, len(self.env.get_propositions()) + 10)}
         self.env_model = getEnvModel(env, obs_space)
+ 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _get_guard_embeddings(self, guard):
         embeddings = []
@@ -198,19 +200,21 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         dfa_nxg = self._format(init_node,accepting_states,nxg)
         return dfa_nxg
 
-    def get_obs(self, features, dfa_binary_seqs, done=None, progression_info=None):
+    def get_obs(self, features, dfa_binary_seqs, dones, progression_infos):
         # dfa_nxg = self.get_dfa_from_binary_seq(dfa_binary_seqs)
         dfa_nxgs = [self.get_dfa_from_binary_seq(dfa_binary_seq) for dfa_binary_seq in dfa_binary_seqs]
-        dfa_obs = {'features': features,'text': dfa_nxgs}
+        dfa_obss = {'features': features,'text': dfa_nxgs}
 
-        preprocessed_obs = utils.my_preprocess_obss(dfa_obs, self.propositions, done=done, progression_info=progression_info, prev_preprocessed_obs=self.prev_preprocessed_dfa)
-        self.prev_preprocessed_dfa = preprocessed_obs.text
+        if self.prev_preprocessed_dfas is not None and len(self.prev_preprocessed_dfas) != len(dfa_obss['text']):
+            self.prev_preprocessed_dfas = None
+        preprocessed_obss = utils.my_preprocess_obss(dfa_obss, self.propositions, done=dones, progression_info=progression_infos, prev_preprocessed_obs=self.prev_preprocessed_dfas, device=self.device)
+        self.prev_preprocessed_dfas = preprocessed_obss.text
 
-        embedding = self.env_model(preprocessed_obs)
-        embed_gnn = self.gnn(preprocessed_obs.text)
+        embedding = self.env_model(preprocessed_obss)
+        embed_gnn = self.gnn(preprocessed_obss.text)
         embedding = torch.cat((embedding, embed_gnn), dim=1) if embedding is not None else embed_gnn
         return embedding
 
     def forward(self, observations) -> th.Tensor:
-        features, dfa_binary_seqs = observations["features"], observations["dfa"]
-        return self.get_obs(features, dfa_binary_seqs)
+        features, dfa_binary_seqs, dones, progression_infos = observations["features"], observations["dfa"], observations["done"], observations["progression_info"]
+        return self.get_obs(features, dfa_binary_seqs, dones, progression_infos)
