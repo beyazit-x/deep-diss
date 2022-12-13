@@ -44,9 +44,6 @@ class DFAEnv(gym.Wrapper):
         self.known_progressions = {}
         self.obs = self.env.reset()
         self.dfa_goal     = self.sample_dfa_goal()
-        # HACK: resample until we're under the limit
-        while len(bin(self.dfa_goal.to_int())[2:]) > self.N:
-            self.dfa_goal     = self.sample_dfa_goal()
         dfa_obs = {'features': self.obs,
                     'dfa': self.get_binary_seq(self.dfa_goal),
                     'done': False,
