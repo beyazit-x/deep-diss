@@ -19,6 +19,9 @@ class DFAEnv(gym.Wrapper):
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})
 
+        self.dfa_goal = None
+        self.dfa_goal_binary_seq = None
+
     def sample_dfa_goal(self):
         # This function must return a DFA for a task.
         # Format: networkx graph
@@ -42,9 +45,28 @@ class DFAEnv(gym.Wrapper):
     def reset(self):
         self.known_progressions = {}
         self.obs = self.env.reset()
-        self.dfa_goal     = self.sample_dfa_goal()
-        dfa_obs = {"features": self.obs, "dfa": self.get_binary_seq(self.dfa_goal)}
+        self.dfa_goal = self.sample_dfa_goal()
+        self.dfa_goal_binary_seq = self.get_binary_seq(self.dfa_goal)
+        dfa_obs = {"features": self.obs, "dfa": self.dfa_goal_binary_seq}
         return dfa_obs
+
+    def get_reward_and_done(self):
+        dfa_reward = 0.0
+        dfa_done = False
+
+        start_state = self.dfa_goal.start
+        start_state_label = self.dfa_goal._label(start_state)
+        states = self.dfa_goal.states()
+        if start_state_label == True: # If starting state of self.dfa_goal is accepting, then dfa_reward is 1.0.
+            dfa_reward = 1.0
+            dfa_done = True
+        elif len(states) == 1: # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a single state, then dfa_reward is -1.0.
+            dfa_reward = -1.0
+            dfa_done = True
+        else:
+            dfa_reward = 0.0 # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a multiple states, then dfa_reward is 0.0.
+            dfa_done = False
+        return dfa_reward, dfa_done
 
 
     def step(self, action):
@@ -54,28 +76,16 @@ class DFAEnv(gym.Wrapper):
 
         truth_assignment = self.get_events(self.obs, action, next_obs)
         next_dfa_goal = self.dfa_goal.advance(truth_assignment)
-        next_dfa_goal.minimize()
+        if next_dfa_goal != self.dfa_goal:
+            next_dfa_goal = next_dfa_goal.minimize()
+            self.dfa_goal = next_dfa_goal
+            self.dfa_goal_binary_seq = self.get_binary_seq(self.dfa_goal)
 
-        dfa_reward = 0.0
-        dfa_done = False
+        dfa_reward, dfa_done = self.get_reward_and_done()
 
-        start_state = next_dfa_goal.start
-        start_state_label = next_dfa_goal._label(start_state)
-        states = next_dfa_goal.states()
-        if start_state_label == True: # If starting state of next_dfa_goal is accepting, then dfa_reward is 1.0.
-            dfa_reward = 1.0
-            dfa_done = True
-        elif len(states) == 1: # If starting state of next_dfa_goal is rejecting and next_dfa_goal has a single state, then dfa_reward is -1.0.
-            dfa_reward = -1.0
-            dfa_done = True
-        else:
-            dfa_reward = 0.0 # If starting state of next_dfa_goal is rejecting and next_dfa_goal has a multiple states, then dfa_reward is 0.0.
-            dfa_done = False
-
-        self.dfa_goal = next_dfa_goal
         self.obs = next_obs
 
-        dfa_obs = {'features': self.obs, 'dfa': self.get_binary_seq(self.dfa_goal)}
+        dfa_obs = {'features': self.obs, 'dfa': self.dfa_goal_binary_seq}
 
         reward  = original_reward + dfa_reward
         done    = env_done or dfa_done
