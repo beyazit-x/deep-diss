@@ -14,10 +14,12 @@ class DFAEnv(gym.Wrapper):
         self.propositions = self.env.get_propositions()
         self.sampler = dfa_samplers.getDFASampler(dfa_sampler, self.propositions)
 
-        self.N = 100 # TODO compute this
+        self.N = 20000 # TODO compute this
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
-                                              "dfa"     : spaces.MultiBinary(self.N)})
+                                              "dfa"     : spaces.MultiBinary(self.N),
+                                              "done"    : spaces.MultiBinary(1),
+                                              "progression_info" : spaces.MultiBinary(1)})
 
     def sample_dfa_goal(self):
         # This function must return a DFA for a task.
@@ -26,7 +28,6 @@ class DFAEnv(gym.Wrapper):
         # dfa = self.sampler.sample()
         from dfa import DFA
         dfa = self.sampler.sample_dfa_formula()
-        # print("DFA", type(dfa), dfa)
         return dfa
 
     def get_events(self, obs, act, next_obs):
@@ -43,7 +44,13 @@ class DFAEnv(gym.Wrapper):
         self.known_progressions = {}
         self.obs = self.env.reset()
         self.dfa_goal     = self.sample_dfa_goal()
-        dfa_obs = {"features": self.obs, "dfa": self.get_binary_seq(self.dfa_goal)}
+        # HACK: resample until we're under the limit
+        while len(bin(self.dfa_goal.to_int())[2:]) > self.N:
+            self.dfa_goal     = self.sample_dfa_goal()
+        dfa_obs = {'features': self.obs,
+                    'dfa': self.get_binary_seq(self.dfa_goal),
+                    'done': False,
+                    'progression_info': False}
         return dfa_obs
 
 
@@ -55,6 +62,8 @@ class DFAEnv(gym.Wrapper):
         truth_assignment = self.get_events(self.obs, action, next_obs)
         next_dfa_goal = self.dfa_goal.advance(truth_assignment)
         next_dfa_goal.minimize()
+
+        progression_info = self.dfa_goal != next_dfa_goal
 
         dfa_reward = 0.0
         dfa_done = False
@@ -75,9 +84,12 @@ class DFAEnv(gym.Wrapper):
         self.dfa_goal = next_dfa_goal
         self.obs = next_obs
 
-        dfa_obs = {'features': self.obs,'dfa': self.get_binary_seq(self.dfa_goal)}
-
         reward  = original_reward + dfa_reward
         done    = env_done or dfa_done
+
+        dfa_obs = {'features': self.obs,
+                    'dfa': self.get_binary_seq(self.dfa_goal),
+                    'done': done,
+                    'progression_info': progression_info}
 
         return dfa_obs, reward, done, info
