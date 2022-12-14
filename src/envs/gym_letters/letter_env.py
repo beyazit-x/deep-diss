@@ -59,6 +59,21 @@ class LetterEnv(gym.Env):
 
         return obs, reward, done, {}
 
+    def transition_probability(self, obs, action, target_obs):
+
+        curr_agent = np.where(obs[:,:,len(self.letter_types)] == 1)
+        target_agent = np.where(target_obs[:,:,len(self.letter_types)] == 1)
+
+        di,dj = self.actions[action]
+        agent_i = (curr_agent[0] + di + self.grid_size) % self.grid_size
+        agent_j = (curr_agent[1] + dj + self.grid_size) % self.grid_size
+        new_agent = agent_i,agent_j
+
+        if new_agent == target_agent:
+            return 1.0
+        else:
+            return 0.0
+
     def _get_observation(self):
         obs = np.zeros(shape=(self.grid_size,self.grid_size,len(self.letter_types)+1),dtype=np.uint8)
 
@@ -155,6 +170,19 @@ class LetterEnv(gym.Env):
         if self.agent in self.map:
             return self.map[self.agent]
         return ""
+
+    def lift_path(self, path):
+        lifted_path = []
+        for curr_obs in path:
+            curr_agent = np.where(obs[:,:,len(self.letter_types)] == 1)
+            if self.agent not in self.map:
+                # didn't activate any events
+                continue
+            curr_event = self.map[curr_agent]
+            if curr_event != lifted_path[-1]:
+                # only add to the lifted path when the color changes
+                lifted_path.append(curr_event)
+
 
     def get_propositions(self):
         return self.letter_types

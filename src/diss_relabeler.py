@@ -7,14 +7,22 @@ from dfa import DFA
 from dfa.utils import dfa2dict
 from dfa.utils import dict2dfa
 
+from diss.experiment import PartialDFAIdentifier
+from diss import LabeledExamples
+from diss import diss
+
 from stable_baselines3.common.buffers import DictReplayBuffer
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 
+from diss_interface import NNPlanner
+
 class DissRelabeler():
 
-    def __init__(self, propositions, replay_buffer: DictReplayBuffer):
-        self.propositions = propositions
-        self.replay_buffer = replay_buffer
+    def __init__(self, model, env):
+        self.model = model
+        self.env = env
+        self.propositions = env.get_propositions()
+        self.replay_buffer = model.replay_buffer
         self.N = 1000 # TODO compute this
 
     def get_state_signature(self, state_id, dfa_dict):
@@ -53,6 +61,52 @@ class DissRelabeler():
         return dfa_reward, dfa_done
 
     def relabel(self, env, batch_size):
+
+        planner = NNPlanner(self.env, self.model)
+
+        universal = DFA(
+            start=True,
+            inputs=self.propositions,
+            outputs={True, False},
+            label=lambda s: s,
+            transition=lambda s, c: True,
+        )
+
+        identifer = PartialDFAIdentifier(
+            partial = universal,
+            base_examples = LabeledExamples(negative=[], positive=[]),
+            try_reach_avoid=True, # TODO check this flag
+        )
+
+        n = 1
+        samples, env_inds, eps_inds = self.replay_buffer.sample_traces(n, env) # This should also return actions
+        observations = samples.observations
+        # shape of features is (n, 76, 7, 7, 13)
+        features, dfas = observations["features"], observations["dfa"]
+        # shape of actions is (n, 76, 1)
+        actions = samples.actions
+
+        for feature, action in zip(features, actions):
+            dfa_search = diss(
+                demos=[planner.to_demo(feature, action)],
+                to_concept=identifer,
+                to_chain=planner.plan,
+                competency=lambda *_: 10,
+                lift_path=planner.lift_path,
+                n_iters=100,
+                reset_period=30,
+                surprise_weight=1,
+                size_weight=1/50,
+                sgs_temp=1/4,
+                example_drop_prob=1/20, #1e-2,
+                synth_timeout=20,
+            )
+
+            for (data, concept, metadata) in dfa_search:
+                print('size', concept.size)
+
+
+    def relabel_old(self, env, batch_size):
         # TODO: Currently minimize method and the advance method changes the state names.
         # If we can make sure that these methods do not change the state names, then we
         # can easily label reached state as the accepting state.

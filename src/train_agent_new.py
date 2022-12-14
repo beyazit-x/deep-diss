@@ -16,7 +16,7 @@ from diss_replay_buffer import DissReplayBuffer
 
 def learn_with_diss(
         model: OffPolicyAlgorithm,
-        propositions,
+        env,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
@@ -29,7 +29,7 @@ def learn_with_diss(
         progress_bar: bool = False,
     ) -> OffPolicyAlgorithm:
 
-    relabaler = DissRelabeler(propositions, model.replay_buffer)
+    relabaler = DissRelabeler(model, env)
 
     total_timesteps, callback = model._setup_learn(
         total_timesteps,
@@ -93,7 +93,7 @@ print("------------------------------------------------")
 model = DQN(
     "MultiInputPolicy",
     env,
-    # learning_starts=100,
+    learning_starts=1000,
     policy_kwargs=dict(
         features_extractor_class=CustomCombinedExtractor,
         features_extractor_kwargs=dict(env=env)
@@ -106,7 +106,7 @@ model = DQN(
     verbose=1
     )
 
-learn_with_diss(model, env.get_propositions(), total_timesteps=10000000)
+learn_with_diss(model, env, total_timesteps=10000000)
 
 model.save("dqn")
 
