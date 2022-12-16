@@ -173,15 +173,20 @@ class LetterEnv(gym.Env):
 
     def lift_path(self, path):
         lifted_path = []
-        for curr_obs in path:
-            curr_agent = np.where(obs[:,:,len(self.letter_types)] == 1)
-            if self.agent not in self.map:
-                # didn't activate any events
-                continue
-            curr_event = self.map[curr_agent]
-            if curr_event != lifted_path[-1]:
-                # only add to the lifted path when the color changes
-                lifted_path.append(curr_event)
+        for i, curr_el in enumerate(path):
+            if i % 2 == 0:
+                curr_obs = curr_el[0]
+                x,y = np.where(curr_obs[:,:,len(self.letter_types)] == 1)
+                curr_agent = (x.item(), y.item())
+                if curr_agent not in self.map:
+                    # didn't activate any events
+                    continue
+                curr_event = self.map[curr_agent]
+                if curr_event != lifted_path[-1]:
+                    # only add to the lifted path when the color changes
+                    lifted_path.append(curr_event)
+
+        return lifted_path
 
 
     def get_propositions(self):

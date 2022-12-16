@@ -77,7 +77,7 @@ class RGCNRootShared(GNN):
     def forward(self, g):
         g = np.array(g).reshape((1, -1)).tolist()[0]
         g = dgl.batch(g)
-        h_0 = self.linear_in(g.ndata["feat"].float().squeeze())
+        h_0 = self.linear_in(g.ndata["feat"].float().squeeze(dim=1))
         h = h_0
         etypes = g.edata["type"]
 

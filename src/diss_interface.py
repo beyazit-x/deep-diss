@@ -20,24 +20,28 @@ class NNPolicyWrapper:
         self.env = env
         self.N = 1000
 
+        self.predict = self.policy.predict
+
     def policy_probability(self, feature, a):
         obs = self.feature2obs(feature)
-        print(self.policy.policy.q_net(obs))
-        return self.policy.policy.q_net(obs)[a]
+        random_likelihood = self.policy.exploration_rate / float(self.policy.action_space.n)
+        policy_action, _  = self.policy.predict(obs, deterministic=True) 
+        if policy_action.squeeze() == a:
+            return (1 - self.policy.exploration_rate) + random_likelihood
+        else:
+            return random_likelihood
 
     def transition_probability(self, feature, a, next_feature):
         return self.env.transition_probability(feature, a, next_feature)
 
     def feature2obs(self, feature):
         bin_seq = self.get_binary_seq(self.dfa_goal)
-        print(torch.unsqueeze(torch.from_numpy(bin_seq), dim=0).shape)
         return {'features': torch.unsqueeze(torch.from_numpy(feature), dim=0), 'dfa': torch.unsqueeze(torch.from_numpy(bin_seq), dim=0)}
 
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
         binary_seq = np.array([int(i) for i in binary_string])
         return np.pad(binary_seq, (self.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
-
 
 
 class NNPlanner:
@@ -49,6 +53,11 @@ class NNPlanner:
         self.act_shape = None
         self.obs_type = None
         self.act_type = None
+
+    def bytes2obs(self, byte):
+        return np.frombuffer(byte, dtype=self.obs_type).reshape(self.obs_shape)
+    def bytes2act(self, byte):
+        return np.frombuffer(byte, dtype=self.act_type).reshape(self.act_shape)
 
     def plan(self, dfa_concept, tree, rationality=None):
 
@@ -83,8 +92,16 @@ class NNPlanner:
                 ])
         return demo
 
-    def lift_path(self, path):
-        env.lift_path(path)
+    def lift_path(self, byte_path):
+        path = []
+        for i, byte in enumerate(byte_path):
+            print(type(byte))
+            if i % 2 == 0:
+                path.append((self.bytes2obs(byte[0]), self.bytes2act(byte[1])))
+            else:
+                path.append(self.bytes2obs(byte))
+
+        return tuple(self.env.lift_path(path)), None
 
 class NNMarkovChain(AnnotatedMarkovChain):
 
@@ -218,28 +235,67 @@ class NNMarkovChain(AnnotatedMarkovChain):
 
     def sample_positive_path(self, pivot):
         # build the initial observation
-        feature = self.tree.state(pivot)
-        initial_obs = {'features': feature, 'dfa': self.dfa_goal}
 
+        if self.tree.is_ego(pivot):
+            byte_obs = self.tree.state(pivot) # this is obs
+            feature = self.bytes2obs(byte_obs)
+
+            bin_seq = self.policy.get_binary_seq(self.dfa_goal)
+            obs = {'features': np.expand_dims(feature, axis=0), 'dfa': np.expand_dims(bin_seq, axis=0)}
+
+            return self.simulate_from_ego(obs, pivot)
+        else:
+            prev_byte_obs, byte_act = self.tree.state(pivot) # this is (prev_obs, act)
+            feature = self.bytes2obs(prev_byte_obs)
+            act = self.bytes2act(byte_act)
+
+            bin_seq = self.policy.get_binary_seq(self.dfa_goal)
+            obs = {'features': np.expand_dims(feature, axis=0), 'dfa': np.expand_dims(bin_seq, axis=0)}
+
+            return self.simulate_from_env(obs, act, pivot)
+
+
+    def sample_negative_path(self, pivot):
+
+        if self.tree.is_ego(pivot):
+            byte_obs = self.tree.state(pivot) # this is obs
+            feature = self.bytes2obs(byte_obs)
+
+            # build the initial observation
+            negated_dfa_goal = ~self.dfa_goal
+            bin_seq = self.policy.get_binary_seq(negated_dfa_goal)
+            obs = {'features': np.expand_dims(feature, axis=0), 'dfa': np.expand_dims(bin_seq, axis=0)}
+
+            return self.simulate_from_ego(obs, pivot)
+        else:
+            prev_byte_obs, byte_act = self.tree.state(pivot) # this is (prev_obs, act)
+            feature = self.bytes2obs(prev_byte_obs)
+
+
+    def simulate_from_ego(self, obs, pivot):
         path = list(self.tree.prefix(pivot))
+        # path = []
+        done = False
         while not done:
-            action = self.policy.predict(obs)
-            obs, reward, done, info = env.step(action)
-            path.append(action)
+            action, _ = self.policy.predict(obs)
+            # TODO only pass the class of the environment to this class
+            path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
+            obs, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
+            path.append(obs['features'].astype(self.obs_type).tobytes())
 
         return path, None
 
-    def sample_negative_path(self, pivot):
-        # build the initial observation
-        feature = self.tree.state(pivot)
-        negated_dfa_goal = ~self.dfa_goal
-        initial_obs = {'features': feature, 'dfa': negated_dfa_goal}
-
+    def simulate_from_env(self, obs, act, pivot):
         path = list(self.tree.prefix(pivot))
+        obs, reward, done, info = self.policy.env.step_from_obs(obs, act.item())
+        path.append(obs['features'].astype(self.obs_type).tobytes())
+
+        done = False
         while not done:
-            action = self.policy.predict(obs)
-            obs, reward, done, info = env.step(action)
-            path.append(action)
+            action, _ = self.policy.predict(obs)
+            path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
+            obs, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
+            path.append(obs['features'].astype(self.obs_type).tobytes())
 
         return path, None
 
