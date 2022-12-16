@@ -280,8 +280,8 @@ class NNMarkovChain(AnnotatedMarkovChain):
             action, _ = self.policy.predict(obs)
             # TODO only pass the class of the environment to this class
             path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
-            obs, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
-            path.append(obs['features'].astype(self.obs_type).tobytes())
+            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
+            path.append(obs_.astype(self.obs_type).tobytes())
 
         return path, None
 
@@ -294,8 +294,8 @@ class NNMarkovChain(AnnotatedMarkovChain):
         while not done:
             action, _ = self.policy.predict(obs)
             path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
-            obs, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
-            path.append(obs['features'].astype(self.obs_type).tobytes())
+            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
+            path.append(obs_.astype(self.obs_type).tobytes())
 
         return path, None
 

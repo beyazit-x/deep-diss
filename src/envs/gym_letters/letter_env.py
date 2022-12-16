@@ -59,6 +59,26 @@ class LetterEnv(gym.Env):
 
         return obs, reward, done, {}
 
+    def step_from_obs(self, prev_obs, action):
+        """
+        This function executes an action in the environment
+        """
+        prev_obs = prev_obs["features"][0]
+        obs = np.zeros(prev_obs.shape)
+        di, dj = self.actions[action]
+        pi, pj, pletter_idx = prev_obs[:, :, :len(self.letter_types)].nonzero() # Don't include agent
+        ai, aj, aletter_idx = prev_obs[:, :, len(self.letter_types):].nonzero() # Don't include agent
+        aletter_idx += len(self.letter_types)
+        if self.use_agent_centric_view:
+            obs[(pi - di + self.grid_size) % self.grid_size, (pj - dj + self.grid_size) % self.grid_size, pletter_idx] = 1
+            obs[ai, aj, aletter_idx] = 1
+        else:
+            obs[pi, pj, pletter_idx] = 1
+            obs[(ai + di + self.grid_size) % self.grid_size, (aj + dj + self.grid_size) % self.grid_size, aletter_idx] = 1
+        obs = np.expand_dims(obs, axis=0)
+        return obs, 0.0, False, {}
+
+
     def transition_probability(self, obs, action, target_obs):
 
         curr_agent = np.where(obs[:,:,len(self.letter_types)] == 1)
