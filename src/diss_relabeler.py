@@ -81,9 +81,6 @@ class DissRelabeler():
         n = 1
         samples, env_inds, eps_inds = self.replay_buffer.sample_traces(n, env) # This should also return actions
         observations = samples.observations
-        print("obs <<<<<")
-        print(observations['features'].shape)
-        print(observations['dfa'].shape)
         # shape of features is (n, 76, 7, 7, 13)
         features, dfas = observations["features"], observations["dfa"]
         # shape of actions is (n, 76, 1)
@@ -107,6 +104,7 @@ class DissRelabeler():
 
             for (data, concept, metadata) in dfa_search:
                 print('size', concept.size)
+        print("returning")
 
 
     def relabel_old(self, env, batch_size):

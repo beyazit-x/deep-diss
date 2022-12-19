@@ -95,7 +95,6 @@ class NNPlanner:
     def lift_path(self, byte_path):
         path = []
         for i, byte in enumerate(byte_path):
-            print(type(byte))
             if i % 2 == 0:
                 path.append((self.bytes2obs(byte[0]), self.bytes2act(byte[1])))
             else:
@@ -276,25 +275,29 @@ class NNMarkovChain(AnnotatedMarkovChain):
         path = list(self.tree.prefix(pivot))
         # path = []
         done = False
+        time = int(len(path)/2)
         while not done:
             action, _ = self.policy.predict(obs)
-            # TODO only pass the class of the environment to this class
             path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
-            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
+            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item(), time)
+            time = info["time"]
             path.append(obs_.astype(self.obs_type).tobytes())
 
         return path, None
 
     def simulate_from_env(self, obs, act, pivot):
         path = list(self.tree.prefix(pivot))
-        obs, reward, done, info = self.policy.env.step_from_obs(obs, act.item())
+        time = int(len(path)/2)
+        obs, reward, done, info = self.policy.env.step_from_obs(obs, act.item(),time)
         path.append(obs['features'].astype(self.obs_type).tobytes())
 
+        time = int(len(path)/2)
         done = False
         while not done:
             action, _ = self.policy.predict(obs)
             path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
-            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item())
+            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item(), time)
+            time = info["time"]
             path.append(obs_.astype(self.obs_type).tobytes())
 
         return path, None

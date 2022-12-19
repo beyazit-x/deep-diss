@@ -59,7 +59,7 @@ class LetterEnv(gym.Env):
 
         return obs, reward, done, {}
 
-    def step_from_obs(self, prev_obs, action):
+    def step_from_obs(self, prev_obs, action, time):
         """
         This function executes an action in the environment
         """
@@ -76,7 +76,10 @@ class LetterEnv(gym.Env):
             obs[pi, pj, pletter_idx] = 1
             obs[(ai + di + self.grid_size) % self.grid_size, (aj + dj + self.grid_size) % self.grid_size, aletter_idx] = 1
         obs = np.expand_dims(obs, axis=0)
-        return obs, 0.0, False, {}
+
+        done = time + 1 > self.timeout
+        info = {"time": time+1}
+        return obs, 0.0, done, info
 
 
     def transition_probability(self, obs, action, target_obs):
@@ -197,6 +200,7 @@ class LetterEnv(gym.Env):
             if i % 2 == 0:
                 curr_obs = curr_el[0]
                 x,y = np.where(curr_obs[:,:,len(self.letter_types)] == 1)
+                print(x,y)
                 curr_agent = (x.item(), y.item())
                 if curr_agent not in self.map:
                     # didn't activate any events
