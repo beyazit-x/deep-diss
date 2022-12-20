@@ -77,7 +77,7 @@ class LetterEnv(gym.Env):
             obs[(ai + di + self.grid_size) % self.grid_size, (aj + dj + self.grid_size) % self.grid_size, aletter_idx] = 1
         obs = np.expand_dims(obs, axis=0)
 
-        done = time + 1 > self.timeout
+        done = (time + 1) > self.timeout
         info = {"time": time+1}
         return obs, 0.0, done, info
 
@@ -200,7 +200,7 @@ class LetterEnv(gym.Env):
             if i % 2 == 0:
                 curr_obs = curr_el[0]
                 x,y = np.where(curr_obs[:,:,len(self.letter_types)] == 1)
-                print(x,y)
+                # print(x,y)
                 curr_agent = (x.item(), y.item())
                 if curr_agent not in self.map:
                     # didn't activate any events

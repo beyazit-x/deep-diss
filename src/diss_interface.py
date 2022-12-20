@@ -22,7 +22,12 @@ class NNPolicyWrapper:
 
         self.predict = self.policy.predict
 
+    def sat_prob(self, feature, a):
+        """ use this for Bayes rule in the future to estimate DFA satisfaction probability """
+        raise NotImplemented
+
     def policy_probability(self, feature, a):
+        # TODO make this a softmax from the q values
         obs = self.feature2obs(feature)
         random_likelihood = self.policy.exploration_rate / float(self.policy.action_space.n)
         policy_action, _  = self.policy.predict(obs, deterministic=True) 

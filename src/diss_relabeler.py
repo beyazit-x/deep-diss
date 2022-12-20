@@ -10,6 +10,7 @@ from dfa.utils import dict2dfa
 from diss.experiment import PartialDFAIdentifier
 from diss import LabeledExamples
 from diss import diss
+from diss.concept_classes import DFAConcept
 
 from stable_baselines3.common.buffers import DictReplayBuffer
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
@@ -72,7 +73,7 @@ class DissRelabeler():
             transition=lambda s, c: True,
         )
 
-        identifer = PartialDFAIdentifier(
+        identifer = PartialDFAIdentifier( # possible change this identifier? to decomposed?
             partial = universal,
             base_examples = LabeledExamples(negative=[], positive=[]),
             try_reach_avoid=True, # TODO check this flag
@@ -102,8 +103,15 @@ class DissRelabeler():
                 synth_timeout=20,
             )
 
-            for (data, concept, metadata) in dfa_search:
+            for (data, concept, metadata) in dfa_search: 
+                """ take a hyperparameter number of dfas from dfa_search and then
+                1) sample from metadata['energy']
+                2) take argmax over energy """
+
                 print('size', concept.size)
+                print('wrapped', DFAConcept.from_dfa(concept.dfa).size)
+                print(concept.dfa)
+                # print('negated', ~concept.dfa)
         print("returning")
 
 
