@@ -219,7 +219,6 @@ class LetterEnv(gym.Env):
                             lifted_path.append(curr_event)
                     else:
                         lifted_path.append(curr_event)
-        print("~~~~~~~~~lifted_path", lifted_path)
         return lifted_path
 
     def get_propositions(self):

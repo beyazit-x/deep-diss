@@ -105,7 +105,7 @@ class NNPlanner:
             else:
                 path.append(self.bytes2obs(byte))
 
-        return tuple(self.env.lift_path(path)), None
+        return tuple(self.env.lift_path(path))
 
 class NNMarkovChain(AnnotatedMarkovChain):
 
@@ -163,11 +163,11 @@ class NNMarkovChain(AnnotatedMarkovChain):
         ATTEMPTS = 100
         for i in range(ATTEMPTS):
             path, prob, is_win = self._sample(pivot, win)
-            print("TRYING", i, is_win, win)
-            print(self.dfa_goal)
+            # print("TRYING", i, is_win, win)
+            # print(self.dfa_goal)
             if is_win == win:
-                print("IT IS A WIN!!!")
-                input(">>")
+                # print("IT IS A WIN!!!")
+                # input(">>")
                 return path, prob
 
 
