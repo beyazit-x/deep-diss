@@ -63,7 +63,7 @@ class LetterEnv(gym.Env):
         """
         This function executes an action in the environment
         """
-        prev_obs = prev_obs["features"][0]
+        prev_obs = prev_obs[0]
         obs = np.zeros(prev_obs.shape)
         di, dj = self.actions[action]
         pi, pj, pletter_idx = prev_obs[:, :, :len(self.letter_types)].nonzero() # Don't include agent
@@ -77,9 +77,11 @@ class LetterEnv(gym.Env):
             obs[(ai + di + self.grid_size) % self.grid_size, (aj + dj + self.grid_size) % self.grid_size, aletter_idx] = 1
         obs = np.expand_dims(obs, axis=0)
 
+        reward = 0.0
         done = (time + 1) > self.timeout
         info = {"time": time+1}
-        return obs, 0.0, done, info
+
+        return obs, reward, done, info
 
 
     def transition_probability(self, obs, action, target_obs):
@@ -194,24 +196,31 @@ class LetterEnv(gym.Env):
             return self.map[self.agent]
         return ""
 
+
+    def get_events_given_obs(self, obs):
+        obs = obs.squeeze()
+        pi, pj, pletter_idx = obs[:, :, :len(self.letter_types)].nonzero() # Don't include agent
+        ai, aj, aletter_idx = obs[:, :, len(self.letter_types):].nonzero() # Don't include agent
+        aletter_idx += len(self.letter_types)
+        for i, j, letter_idx in zip(pi, pj, pletter_idx):
+            if i == ai and j == aj:
+                return self.letter_types[letter_idx]
+        return ""
+
     def lift_path(self, path):
         lifted_path = []
         for i, curr_el in enumerate(path):
             if i % 2 == 0:
-                curr_obs = curr_el[0]
-                x,y = np.where(curr_obs[:,:,len(self.letter_types)] == 1)
-                # print(x,y)
-                curr_agent = (x.item(), y.item())
-                if curr_agent not in self.map:
-                    # didn't activate any events
-                    continue
-                curr_event = self.map[curr_agent]
-                if curr_event != lifted_path[-1]:
-                    # only add to the lifted path when the color changes
-                    lifted_path.append(curr_event)
-
+                obs = curr_el[0]
+                curr_event = self.get_events_given_obs(obs)
+                if curr_event != "":
+                    if len(lifted_path) > 0:
+                        if curr_event != lifted_path[-1]:
+                            lifted_path.append(curr_event)
+                    else:
+                        lifted_path.append(curr_event)
+        print("~~~~~~~~~lifted_path", lifted_path)
         return lifted_path
-
 
     def get_propositions(self):
         return self.letter_types

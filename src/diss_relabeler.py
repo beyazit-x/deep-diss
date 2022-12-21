@@ -103,14 +103,16 @@ class DissRelabeler():
                 synth_timeout=20,
             )
 
+            i = 0
             for (data, concept, metadata) in dfa_search: 
                 """ take a hyperparameter number of dfas from dfa_search and then
                 1) sample from metadata['energy']
                 2) take argmax over energy """
-
+                print("i:", i)
                 print('size', concept.size)
                 print('wrapped', DFAConcept.from_dfa(concept.dfa).size)
                 print(concept.dfa)
+                i += 1
                 # print('negated', ~concept.dfa)
         print("returning")
 

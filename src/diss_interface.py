@@ -162,12 +162,13 @@ class NNMarkovChain(AnnotatedMarkovChain):
         """
         ATTEMPTS = 100
         for i in range(ATTEMPTS):
-            result = self._sample(pivot, win)
-            if result is None:
-                return result
-            # TODO ensure that the trace is correctly winning or losing here, otherwise, continue
-            else:
-                return result
+            path, prob, is_win = self._sample(pivot, win)
+            print("TRYING", i, is_win, win)
+            print(self.dfa_goal)
+            if is_win == win:
+                print("IT IS A WIN!!!")
+                input(">>")
+                return path, prob
 
 
     def _sample(self, pivot, win):
@@ -270,41 +271,52 @@ class NNMarkovChain(AnnotatedMarkovChain):
             bin_seq = self.policy.get_binary_seq(negated_dfa_goal)
             obs = {'features': np.expand_dims(feature, axis=0), 'dfa': np.expand_dims(bin_seq, axis=0)}
 
-            return self.simulate_from_ego(obs, pivot)
+            path, prob, is_win = self.simulate_from_ego(obs, pivot)
+            return path, prob, not is_win
         else:
             prev_byte_obs, byte_act = self.tree.state(pivot) # this is (prev_obs, act)
             feature = self.bytes2obs(prev_byte_obs)
+            act = self.bytes2act(byte_act)
+
+            negated_dfa_goal = ~self.dfa_goal
+            bin_seq = self.policy.get_binary_seq(negated_dfa_goal)
+            obs = {'features': np.expand_dims(feature, axis=0), 'dfa': np.expand_dims(bin_seq, axis=0)}
+
+            path, prob, is_win = self.simulate_from_env(obs, act, pivot)
+            return path, prob, not is_win
 
 
     def simulate_from_ego(self, obs, pivot):
         path = list(self.tree.prefix(pivot))
         # path = []
         done = False
+        reward = 0
         time = int(len(path)/2)
         while not done:
             action, _ = self.policy.predict(obs)
             path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
-            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item(), time)
+            obs, reward, done, info = self.policy.env.step_given_obs(obs, action.item(), time)
             time = info["time"]
-            path.append(obs_.astype(self.obs_type).tobytes())
+            path.append(obs["features"].astype(self.obs_type).tobytes())
 
-        return path, None
+        return path, None, reward > 0
 
     def simulate_from_env(self, obs, act, pivot):
         path = list(self.tree.prefix(pivot))
         time = int(len(path)/2)
-        obs, reward, done, info = self.policy.env.step_from_obs(obs, act.item(),time)
+        obs, reward, done, info = self.policy.env.step_given_obs(obs, act.item(),time)
         path.append(obs['features'].astype(self.obs_type).tobytes())
 
-        time = int(len(path)/2)
         done = False
+        reward = 0
+        time = int(len(path)/2)
         while not done:
             action, _ = self.policy.predict(obs)
             path.append((obs['features'].astype(self.obs_type).tobytes(), action.astype(self.act_type).tobytes() ))
-            obs_, reward, done, info = self.policy.env.step_from_obs(obs, action.item(), time)
+            obs, reward, done, info = self.policy.env.step_given_obs(obs, action.item(), time)
             time = info["time"]
-            path.append(obs_.astype(self.obs_type).tobytes())
+            path.append(obs["features"].astype(self.obs_type).tobytes())
 
-        return path, None
+        return path, None, reward > 0
 
 

@@ -7,6 +7,7 @@ import dfa_samplers
 from envs.safety.zones_env import zone
 import networkx as nx
 import pickle
+from dfa import DFA
 
 class DFAEnv(gym.Wrapper):
     def __init__(self, env, dfa_sampler=None):
@@ -68,6 +69,29 @@ class DFAEnv(gym.Wrapper):
             dfa_done = False
         return dfa_reward, dfa_done
 
+    def get_reward_and_done_given_dfa(self, dfa):
+        dfa_reward = 0.0
+        dfa_done = False
+
+        start_state = dfa.start
+        start_state_label = dfa._label(start_state)
+        states = dfa.states()
+        if start_state_label == True: # If starting state of self.dfa_goal is accepting, then dfa_reward is 1.0.
+            dfa_reward = 1.0
+            dfa_done = True
+        elif len(states) == 1: # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a single state, then dfa_reward is -1.0.
+            dfa_reward = -1.0
+            dfa_done = True
+        else:
+            dfa_reward = 0.0 # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a multiple states, then dfa_reward is 0.0.
+            dfa_done = False
+        return dfa_reward, dfa_done
+
+    def get_dfa_from_binary_seq(self, dfa_binary_seq):
+        dfa_binary_str = "".join(str(int(i)) for i in dfa_binary_seq.squeeze().tolist())
+        dfa_int = int(dfa_binary_str, 2)
+        dfa = DFA.from_int(dfa_int, self.propositions)
+        return dfa
 
     def step(self, action):
         # executing the action in the environment
@@ -89,5 +113,36 @@ class DFAEnv(gym.Wrapper):
 
         reward  = original_reward + dfa_reward
         done    = env_done or dfa_done
+
+        return dfa_obs, reward, done, info
+
+
+    def step_given_obs(self, obs, action, time):
+        # executing the action in the environment
+
+        print(obs["features"].shape, obs["dfa"].shape)
+
+        next_obs, original_reward, env_done, info = self.env.step_from_obs(obs["features"], action, time)
+
+        dfa_bin_seq = obs["dfa"]
+        dfa = self.get_dfa_from_binary_seq(dfa_bin_seq)
+
+        truth_assignment = self.env.get_events_given_obs(next_obs)
+        next_dfa = dfa.advance(truth_assignment)
+        if next_dfa != dfa:
+            next_dfa = next_dfa.minimize()
+            dfa = next_dfa
+            dfa_bin_seq = self.get_binary_seq(dfa)
+
+
+        dfa_reward, dfa_done = self.get_reward_and_done_given_dfa(dfa)
+
+        obs = next_obs
+
+        dfa_obs = {'features': obs, 'dfa': dfa_bin_seq}
+
+        reward  = original_reward + dfa_reward
+        done    = env_done or dfa_done
+
 
         return dfa_obs, reward, done, info
