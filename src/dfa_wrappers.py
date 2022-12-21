@@ -118,31 +118,29 @@ class DFAEnv(gym.Wrapper):
 
 
     def step_given_obs(self, obs, action, time):
-        # executing the action in the environment
 
-        print(obs["features"].shape, obs["dfa"].shape)
+        # advance the environment
+        next_feature, original_reward, env_done, info = self.env.step_from_obs(obs["features"], action, time)
 
-        next_obs, original_reward, env_done, info = self.env.step_from_obs(obs["features"], action, time)
-
+        # advance the dfa
         dfa_bin_seq = obs["dfa"]
         dfa = self.get_dfa_from_binary_seq(dfa_bin_seq)
-
-        truth_assignment = self.env.get_events_given_obs(next_obs)
+        truth_assignment = self.env.get_events_given_obs(next_feature)
         next_dfa = dfa.advance(truth_assignment)
+
+
         if next_dfa != dfa:
             next_dfa = next_dfa.minimize()
-            dfa = next_dfa
-            dfa_bin_seq = self.get_binary_seq(dfa)
+            next_dfa_bin_seq = np.expand_dims(self.get_binary_seq(next_dfa), axis=0)
 
+        else:
+            next_dfa_bin_seq = dfa_bin_seq
 
-        dfa_reward, dfa_done = self.get_reward_and_done_given_dfa(dfa)
+        next_obs = {'features': next_feature, 'dfa': next_dfa_bin_seq}
 
-        obs = next_obs
-
-        dfa_obs = {'features': obs, 'dfa': dfa_bin_seq}
-
+        dfa_reward, dfa_done = self.get_reward_and_done_given_dfa(next_dfa)
         reward  = original_reward + dfa_reward
         done    = env_done or dfa_done
 
 
-        return dfa_obs, reward, done, info
+        return next_obs, reward, done, info

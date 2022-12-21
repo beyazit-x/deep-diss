@@ -87,6 +87,7 @@ class DissRelabeler():
         # shape of actions is (n, 76, 1)
         actions = samples.actions
 
+        relabeled_dfas = []
         for feature, action in zip(features, actions):
             dfa_search = diss(
                 demos=[planner.to_demo(feature, action)],
@@ -103,18 +104,23 @@ class DissRelabeler():
                 synth_timeout=20,
             )
 
-            i = 0
-            for (data, concept, metadata) in dfa_search: 
-                """ take a hyperparameter number of dfas from dfa_search and then
-                1) sample from metadata['energy']
-                2) take argmax over energy """
-                print("i:", i)
-                print('size', concept.size)
-                print('wrapped', DFAConcept.from_dfa(concept.dfa).size)
-                print(concept.dfa)
-                i += 1
-                # print('negated', ~concept.dfa)
-        print("returning")
+            dfa_sample_size = 10
+            energies = []
+            dfas = []
+            """ take a hyperparameter number of dfas from dfa_search and then,
+                    1) sample from metadata['energy'], or
+                    2) take argmax over energy """
+            for i, (data, concept, metadata) in zip(range(dfa_sample_size), dfa_search): 
+                dfas.append(concept.dfa)
+                energies.append(metadata['energy'])
+
+            idx_min = np.argmin(energies)
+            dfa_min = dfas[idx_min]
+            relabeled_dfas.append(dfa_min)
+            print('adding', dfa_min) 
+
+        # TODO use relabeled_dfas to rewrite the buffer here
+
 
 
     def relabel_old(self, env, batch_size):
