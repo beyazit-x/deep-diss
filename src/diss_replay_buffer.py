@@ -45,25 +45,28 @@ class DissReplayBuffer(DictReplayBuffer):
         self.max_episode_length = max_episode_length
         self.n_envs = n_envs
         self.input_shape = {
-            "observation": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["features"],
-            "achieved_goal": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["dfa"],
-            "desired_goal": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["dfa"],
+            "features": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["features"],
+            "dfa": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["dfa"],
             "action": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + (self.action_dim,),
             "reward": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + (1,),
-            "next_observation": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["features"],
-            "next_achieved_goal": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["dfa"],
-            "next_desired_goal": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["dfa"],
+            "next_features": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["features"],
+            "next_dfa": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + self.obs_shape["dfa"],
             "done": (self.n_envs, self.her_replay_buffer_size, self.max_episode_length + 1,) + (1,)
         }
-        self.her_replay_buffer = {
+        self.her_replay_buffer_not_relabeled = {
             key: np.zeros(dim, dtype=np.float32) if key != "action" else np.zeros(dim, dtype=np.int64)
             for key, dim in self.input_shape.items()
         }
-        self.is_relabeled = np.zeros((self.n_envs, self.her_replay_buffer_size), dtype=np.int64)
-        self.is_in_progress = np.zeros((self.n_envs, self.her_replay_buffer_size), dtype=np.int64)
-        self.episode_lengths = np.zeros((self.n_envs, self.her_replay_buffer_size), dtype=np.int64)
-        self.current_episode_idx = np.zeros(self.n_envs, dtype=np.int64)
-        self.current_episode_step_idx = np.zeros(self.n_envs, dtype=np.int64)
+        self.her_replay_buffer_relabeled = {
+            key: np.zeros((dim[0] * dim[1],) + dim[2:], dtype=np.float32) if key != "action" else np.zeros((dim[0] * dim[1],) + dim[2:], dtype=np.int64)
+            for key, dim in self.input_shape.items()
+        }
+        self.not_relabeled_traces = []
+        self.episode_lengths = np.zeros((self.n_envs * self.her_replay_buffer_size), dtype=np.int64) # This should keep track of relabeled ones
+        self.current_episode_idx_not_relabeled = np.zeros(self.n_envs, dtype=np.int64)
+        self.current_episode_step_idx_not_relabeled = np.zeros(self.n_envs, dtype=np.int64)
+        self.current_episode_idx_relabeled = 0
+        self.is_her_replay_buffer_relabeled_full = False
         self.her_ratio = 0.1
         self.env_indices = np.arange(self.n_envs)
 
@@ -77,84 +80,47 @@ class DissReplayBuffer(DictReplayBuffer):
         infos: List[Dict[str, Any]],
     ) -> None:
         super().add(obs, next_obs, action, reward, done, infos)
-        # self.her_replay_buffer["observation"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(obs["features"]).copy()
-        # self.her_replay_buffer["achieved_goal"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(obs["dfa"]).copy()
-        # self.her_replay_buffer["desired_goal"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(obs["dfa"]).copy()
-        # self.her_replay_buffer["action"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(action).copy()
-        # self.her_replay_buffer["reward"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(reward).copy()
-        # self.her_replay_buffer["next_observation"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(next_obs["features"]).copy()
-        # self.her_replay_buffer["next_achieved_goal"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(next_obs["dfa"]).copy()
-        # self.her_replay_buffer["next_desired_goal"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(next_obs["dfa"]).copy()
-        # self.her_replay_buffer["done"][self.env_indices, self.current_episode_idx, self.current_episode_step_idx] = np.array(done).copy()
-        # self.is_relabeled[self.env_indices, self.current_episode_idx] = (-1)*np.ones(self.n_envs, dtype=np.int64) # Fix this!!
-        # self.is_in_progress[self.env_indices, self.current_episode_idx] = np.zeros(self.n_envs, dtype=np.int64)
-        # self.current_episode_step_idx += 1
-        # inds = (done == 1) | (self.current_episode_step_idx >= self.max_episode_length)
-        # self.episode_lengths[inds, self.current_episode_idx] = self.current_episode_step_idx[inds]
-        # self.current_episode_idx[inds] = (self.current_episode_idx[inds] + 1) % self.her_replay_buffer_size
-        # self.current_episode_step_idx[inds] = 0
-        # Below is the for loop version of the above batched code
         for i in range(self.n_envs):
-            self.her_replay_buffer["observation"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(obs["features"][i]).copy()
-            self.her_replay_buffer["achieved_goal"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(obs["dfa"][i]).copy()
-            self.her_replay_buffer["desired_goal"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(obs["dfa"][i]).copy()
-            self.her_replay_buffer["action"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(action[i]).copy()
-            self.her_replay_buffer["reward"][i][self.current_episode_idx[i]][self.current_episode_step_idx] = np.array(reward[i]).copy()
-            self.her_replay_buffer["next_observation"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(next_obs["features"][i]).copy()
-            self.her_replay_buffer["next_achieved_goal"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(next_obs["dfa"][i]).copy()
-            self.her_replay_buffer["next_desired_goal"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(next_obs["dfa"][i]).copy()
-            self.her_replay_buffer["done"][i][self.current_episode_idx[i]][self.current_episode_step_idx[i]] = np.array(done[i]).copy()
-            self.is_relabeled[i][self.current_episode_idx[i]] = 0
-            self.is_in_progress[i][self.current_episode_idx[i]] = 0
-            self.current_episode_step_idx[i] += 1
-            if done[i] or self.current_episode_step_idx[i] > self.max_episode_length:
-                self.is_relabeled[i][self.current_episode_idx[i]] = -1
-                self.episode_lengths[i][self.current_episode_idx[i]] = self.current_episode_step_idx[i]
-                self.current_episode_idx[i] = (self.current_episode_idx[i] + 1) % self.her_replay_buffer_size
-                self.current_episode_step_idx[i] = 0
+            self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(obs["features"][i]).copy()
+            self.her_replay_buffer_not_relabeled["dfa"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(obs["dfa"][i]).copy()
+            self.her_replay_buffer_not_relabeled["action"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(action[i]).copy()
+            self.her_replay_buffer_not_relabeled["reward"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled] = np.array(reward[i]).copy()
+            self.her_replay_buffer_not_relabeled["next_features"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(next_obs["features"][i]).copy()
+            self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(next_obs["dfa"][i]).copy()
+            self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(done[i]).copy()
+            self.current_episode_step_idx_not_relabeled[i] += 1
+            if done[i] or self.current_episode_step_idx_not_relabeled[i] > self.max_episode_length:
+                self.not_relabeled_traces.append((i, self.current_episode_idx_not_relabeled[i]))
+                self.current_episode_idx_not_relabeled[i] = (self.current_episode_idx_not_relabeled[i] + 1) % self.her_replay_buffer_size
+                self.current_episode_step_idx_not_relabeled[i] = 0
+                if (i, self.current_episode_idx_not_relabeled[i]) in self.not_relabeled_traces:
+                    self.not_relabeled_traces.remove((i, self.current_episode_idx_not_relabeled[i])) # We will start writing to that env-episode pair so remove
+                self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]].shape)
+                self.her_replay_buffer_not_relabeled["dfa"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["dfa"][i][self.current_episode_idx_not_relabeled[i]].shape)
+                self.her_replay_buffer_not_relabeled["action"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["action"][i][self.current_episode_idx_not_relabeled[i]].shape)
+                self.her_replay_buffer_not_relabeled["reward"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["reward"][i][self.current_episode_idx_not_relabeled[i]].shape)
+                self.her_replay_buffer_not_relabeled["next_features"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["next_features"][i][self.current_episode_idx_not_relabeled[i]].shape)
+                self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]].shape)
+                self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]].shape)
+
 
     def sample_traces(self, batch_size, env):
-        inds = np.argwhere(self.is_relabeled < 0)
-        env_inds = inds[:, 0]
-        eps_inds = inds[:, 1]
-        n_not_relabeled_traces = env_inds.size
+        n_not_relabeled_traces = len(self.not_relabeled_traces)
         if batch_size > n_not_relabeled_traces or batch_size <= 0:
             return None
-        return self.get_traces_from_inds(batch_size, env_inds, eps_inds, env)
-
-    def relabel_traces(self, dict_replay_buffer_samples, env_inds, eps_inds):
-        # import sys
-        # np.set_printoptions(threshold=sys.maxsize)
-        # print("----------------------------------------------------------------------------------------")
-        # for i in range(76):
-        #     print(i, self.her_replay_buffer["achieved_goal"][env_inds, eps_inds][0][i])
-        #     print(i, self.her_replay_buffer["done"][env_inds, eps_inds][0][i])
-        #     print(i, self.her_replay_buffer["reward"][env_inds, eps_inds][0][i])
-        # print("----------------------------------------------------------------------------------------")
-        self.her_replay_buffer["achieved_goal"][env_inds, eps_inds] = dict_replay_buffer_samples.observations["dfa"]
-        self.her_replay_buffer["done"][env_inds, eps_inds] = dict_replay_buffer_samples.dones
-        self.her_replay_buffer["reward"][env_inds, eps_inds] = dict_replay_buffer_samples.rewards
-        # for i in range(76):
-        #     print(i, self.her_replay_buffer["achieved_goal"][env_inds, eps_inds][0][i])
-        #     print(i, self.her_replay_buffer["done"][env_inds, eps_inds][0][i])
-        #     print(i, self.her_replay_buffer["reward"][env_inds, eps_inds][0][i])
-        # print("----------------------------------------------------------------------------------------")
-        # sys.exit()
-
-    def get_traces_from_inds(self, batch_size, env_inds, eps_inds, env):
-        sample_space = [(i, j) for i, j in zip(env_inds, eps_inds)]
-        sample_inds = np.array(random.sample(sample_space, batch_size))
+        sample_inds = np.array(self.not_relabeled_traces[:batch_size])
+        self.not_relabeled_traces = self.not_relabeled_traces[batch_size:]
         sample_env_inds = sample_inds[:, 0]
         sample_eps_inds = sample_inds[:, 1]
 
-        obs_ = self._normalize_obs({"features": self.her_replay_buffer["observation"][sample_env_inds, sample_eps_inds], "dfa": self.her_replay_buffer["achieved_goal"][sample_env_inds, sample_eps_inds]}, env)
-        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer["next_observation"][sample_env_inds, sample_eps_inds], "dfa": self.her_replay_buffer["next_achieved_goal"][sample_env_inds, sample_eps_inds]}, env)
+        obs_ = self._normalize_obs({"features": self.her_replay_buffer_not_relabeled["features"][sample_env_inds, sample_eps_inds].copy(), "dfa": self.her_replay_buffer_not_relabeled["dfa"][sample_env_inds, sample_eps_inds].copy()}, env)
+        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer_not_relabeled["next_features"][sample_env_inds, sample_eps_inds].copy(), "dfa": self.her_replay_buffer_not_relabeled["next_dfa"][sample_env_inds, sample_eps_inds].copy()}, env)
 
-        observations = {key: obs for key, obs in obs_.items()} # TODO: do not conver to torch
-        actions = self.her_replay_buffer["action"][sample_env_inds, sample_eps_inds]
+        observations = {key: obs for key, obs in obs_.items()}
+        actions = self.her_replay_buffer_not_relabeled["action"][sample_env_inds, sample_eps_inds].copy()
         next_observations = {key: next_obs for key, next_obs in next_obs_.items()}
-        dones = self.her_replay_buffer["done"][sample_env_inds, sample_eps_inds]
-        rewards = self._normalize_reward(self.her_replay_buffer["reward"][sample_env_inds, sample_eps_inds], env)
+        dones = self.her_replay_buffer_not_relabeled["done"][sample_env_inds, sample_eps_inds].copy()
+        rewards = self._normalize_reward(self.her_replay_buffer_not_relabeled["reward"][sample_env_inds, sample_eps_inds].copy(), env)
 
         return DictReplayBufferSamples(
             observations=observations,
@@ -162,23 +128,41 @@ class DissReplayBuffer(DictReplayBuffer):
             next_observations=next_observations,
             dones=dones,
             rewards=rewards
-        ), env_inds, eps_inds
+        )
 
-    def get_her_transitions_from_inds(self, her_batch_size, env_inds, eps_inds, env):
-        sample_space = [(i, j, k) for i, j in zip(env_inds, eps_inds) for k in range(self.episode_lengths[i, j])]
+    def relabel_traces(self, batch_size, dict_replay_buffer_samples):
+        self.her_replay_buffer_relabeled["features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["features"].copy()
+        self.her_replay_buffer_relabeled["dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["dfa"].copy()
+        self.her_replay_buffer_relabeled["action"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.actions.copy()
+        self.her_replay_buffer_relabeled["reward"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.rewards.copy()
+        self.her_replay_buffer_relabeled["next_features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["features"].copy()
+        self.her_replay_buffer_relabeled["next_dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["dfa"].copy()
+        self.her_replay_buffer_relabeled["done"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.dones.copy()
+        self.episode_lengths[self.current_episode_idx_relabeled] = dict_replay_buffer_samples.dones.squeeze().nonzero()[0].item()
+        self.current_episode_idx_relabeled = (self.current_episode_idx_relabeled + batch_size) % (self.n_envs * self.her_replay_buffer_size)
+        if self.current_episode_idx_relabeled == 0:
+            self.is_her_replay_buffer_relabeled_full = True
+
+    def get_her_transitions_from_inds(self, her_batch_size, env):
+        sample_space = None
+        if self.is_her_replay_buffer_relabeled_full:
+            sample_space = [(i, j) for i in range(self.n_envs * self.her_replay_buffer_size) for j in range(self.episode_lengths[i])]
+        else:
+            sample_space = [(i, j) for i in range(self.current_episode_idx_relabeled) for j in range(self.episode_lengths[i])]
+        if her_batch_size > len(sample_space):
+            return
         sample_inds = np.array(random.sample(sample_space, her_batch_size))
-        sample_env_inds = sample_inds[:, 0]
-        sample_eps_inds = sample_inds[:, 1]
-        sample_stp_inds = sample_inds[:, 2]
+        sample_trc_inds = sample_inds[:, 0]
+        sample_stp_inds = sample_inds[:, 1]
 
-        obs_ = self._normalize_obs({"features": self.her_replay_buffer["observation"][sample_env_inds, sample_eps_inds, sample_stp_inds], "dfa": self.her_replay_buffer["achieved_goal"][sample_env_inds, sample_eps_inds, sample_stp_inds]}, env)
-        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer["next_observation"][sample_env_inds, sample_eps_inds, sample_stp_inds], "dfa": self.her_replay_buffer["next_achieved_goal"][sample_env_inds, sample_eps_inds, sample_stp_inds]}, env)
+        obs_ = self._normalize_obs({"features": self.her_replay_buffer_relabeled["features"][sample_trc_inds, sample_stp_inds].copy(), "dfa": self.her_replay_buffer_relabeled["dfa"][sample_trc_inds, sample_stp_inds].copy()}, env)
+        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer_relabeled["next_features"][sample_trc_inds, sample_stp_inds].copy(), "dfa": self.her_replay_buffer_relabeled["next_dfa"][sample_trc_inds, sample_stp_inds].copy()}, env)
 
         observations = {key: self.to_torch(obs) for key, obs in obs_.items()}
-        actions = self.to_torch(self.her_replay_buffer["action"][sample_env_inds, sample_eps_inds, sample_stp_inds])
+        actions = self.to_torch(self.her_replay_buffer_relabeled["action"][sample_trc_inds, sample_stp_inds].copy())
         next_observations = {key: self.to_torch(next_obs) for key, next_obs in next_obs_.items()}
-        dones = self.to_torch(self.her_replay_buffer["done"][sample_env_inds, sample_eps_inds, sample_stp_inds])
-        rewards = self.to_torch(self._normalize_reward(self.her_replay_buffer["reward"][sample_env_inds, sample_eps_inds, sample_stp_inds], env))
+        dones = self.to_torch(self.her_replay_buffer_relabeled["done"][sample_trc_inds, sample_stp_inds].copy())
+        rewards = self.to_torch(self._normalize_reward(self.her_replay_buffer_relabeled["reward"][sample_trc_inds, sample_stp_inds].copy(), env))
 
         return DictReplayBufferSamples(
             observations=observations,
@@ -190,15 +174,11 @@ class DissReplayBuffer(DictReplayBuffer):
 
     def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> DictReplayBufferSamples:
         her_batch_size = int(self.her_ratio * batch_size)
-        inds = np.argwhere(self.is_relabeled > 0)
-        env_inds = inds[:, 0]
-        eps_inds = inds[:, 1]
-        n_relabeled_transitions = np.sum(self.episode_lengths[env_inds, eps_inds])
-        if her_batch_size > n_relabeled_transitions or her_batch_size <= 0:
-            return super().sample(batch_size, env)
         regular_batch_size = batch_size - her_batch_size
         regular_samples = super().sample(regular_batch_size, env)
-        her_samples = self.get_her_transitions_from_inds(her_batch_size, env_inds, eps_inds, env)
+        her_samples = self.get_her_transitions_from_inds(her_batch_size, env)
+        if her_samples is None:
+            her_samples = super().sample(her_batch_size, env)
         return DictReplayBufferSamples(
             observations={"features": th.concat((regular_samples.observations["features"], her_samples.observations["features"])), "dfa": th.concat((regular_samples.observations["dfa"], her_samples.observations["dfa"]))},
             actions=th.concat((regular_samples.actions, her_samples.actions)),
