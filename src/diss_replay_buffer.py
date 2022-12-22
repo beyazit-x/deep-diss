@@ -113,14 +113,14 @@ class DissReplayBuffer(DictReplayBuffer):
         sample_env_inds = sample_inds[:, 0]
         sample_eps_inds = sample_inds[:, 1]
 
-        obs_ = self._normalize_obs({"features": self.her_replay_buffer_not_relabeled["features"][sample_env_inds, sample_eps_inds].copy(), "dfa": self.her_replay_buffer_not_relabeled["dfa"][sample_env_inds, sample_eps_inds].copy()}, env)
-        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer_not_relabeled["next_features"][sample_env_inds, sample_eps_inds].copy(), "dfa": self.her_replay_buffer_not_relabeled["next_dfa"][sample_env_inds, sample_eps_inds].copy()}, env)
+        obs_ = self._normalize_obs({"features": self.her_replay_buffer_not_relabeled["features"][sample_env_inds, sample_eps_inds], "dfa": self.her_replay_buffer_not_relabeled["dfa"][sample_env_inds, sample_eps_inds]}, env)
+        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer_not_relabeled["next_features"][sample_env_inds, sample_eps_inds], "dfa": self.her_replay_buffer_not_relabeled["next_dfa"][sample_env_inds, sample_eps_inds]}, env)
 
         observations = {key: obs for key, obs in obs_.items()}
-        actions = self.her_replay_buffer_not_relabeled["action"][sample_env_inds, sample_eps_inds].copy()
+        actions = self.her_replay_buffer_not_relabeled["action"][sample_env_inds, sample_eps_inds]
         next_observations = {key: next_obs for key, next_obs in next_obs_.items()}
-        dones = self.her_replay_buffer_not_relabeled["done"][sample_env_inds, sample_eps_inds].copy()
-        rewards = self._normalize_reward(self.her_replay_buffer_not_relabeled["reward"][sample_env_inds, sample_eps_inds].copy(), env)
+        dones = self.her_replay_buffer_not_relabeled["done"][sample_env_inds, sample_eps_inds]
+        rewards = self._normalize_reward(self.her_replay_buffer_not_relabeled["reward"][sample_env_inds, sample_eps_inds], env)
 
         return DictReplayBufferSamples(
             observations=observations,
@@ -131,16 +131,22 @@ class DissReplayBuffer(DictReplayBuffer):
         )
 
     def relabel_traces(self, batch_size, dict_replay_buffer_samples):
-        self.her_replay_buffer_relabeled["features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["features"].copy()
-        self.her_replay_buffer_relabeled["dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["dfa"].copy()
-        self.her_replay_buffer_relabeled["action"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.actions.copy()
-        self.her_replay_buffer_relabeled["reward"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.rewards.copy()
-        self.her_replay_buffer_relabeled["next_features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["features"].copy()
-        self.her_replay_buffer_relabeled["next_dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["dfa"].copy()
-        self.her_replay_buffer_relabeled["done"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.dones.copy()
-        self.episode_lengths[self.current_episode_idx_relabeled] = dict_replay_buffer_samples.dones.squeeze().nonzero()[0].item()
+        if batch_size <= 0 :
+            return
+        self.her_replay_buffer_relabeled["features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["features"]
+        self.her_replay_buffer_relabeled["dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["dfa"]
+        self.her_replay_buffer_relabeled["action"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.actions
+        self.her_replay_buffer_relabeled["reward"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.rewards
+        self.her_replay_buffer_relabeled["next_features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["features"]
+        self.her_replay_buffer_relabeled["next_dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["dfa"]
+        self.her_replay_buffer_relabeled["done"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.dones
+
+        _, end_of_step_inds = dict_replay_buffer_samples.dones.squeeze().nonzero()
+        self.episode_lengths[self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = end_of_step_inds
+        
+        temp = self.current_episode_idx_relabeled
         self.current_episode_idx_relabeled = (self.current_episode_idx_relabeled + batch_size) % (self.n_envs * self.her_replay_buffer_size)
-        if self.current_episode_idx_relabeled == 0:
+        if temp >= self.current_episode_idx_relabeled:
             self.is_her_replay_buffer_relabeled_full = True
 
     def get_her_transitions_from_inds(self, her_batch_size, env):
@@ -155,14 +161,14 @@ class DissReplayBuffer(DictReplayBuffer):
         sample_trc_inds = sample_inds[:, 0]
         sample_stp_inds = sample_inds[:, 1]
 
-        obs_ = self._normalize_obs({"features": self.her_replay_buffer_relabeled["features"][sample_trc_inds, sample_stp_inds].copy(), "dfa": self.her_replay_buffer_relabeled["dfa"][sample_trc_inds, sample_stp_inds].copy()}, env)
-        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer_relabeled["next_features"][sample_trc_inds, sample_stp_inds].copy(), "dfa": self.her_replay_buffer_relabeled["next_dfa"][sample_trc_inds, sample_stp_inds].copy()}, env)
+        obs_ = self._normalize_obs({"features": self.her_replay_buffer_relabeled["features"][sample_trc_inds, sample_stp_inds], "dfa": self.her_replay_buffer_relabeled["dfa"][sample_trc_inds, sample_stp_inds]}, env)
+        next_obs_ = self._normalize_obs({"features": self.her_replay_buffer_relabeled["next_features"][sample_trc_inds, sample_stp_inds], "dfa": self.her_replay_buffer_relabeled["next_dfa"][sample_trc_inds, sample_stp_inds]}, env)
 
         observations = {key: self.to_torch(obs) for key, obs in obs_.items()}
-        actions = self.to_torch(self.her_replay_buffer_relabeled["action"][sample_trc_inds, sample_stp_inds].copy())
+        actions = self.to_torch(self.her_replay_buffer_relabeled["action"][sample_trc_inds, sample_stp_inds])
         next_observations = {key: self.to_torch(next_obs) for key, next_obs in next_obs_.items()}
-        dones = self.to_torch(self.her_replay_buffer_relabeled["done"][sample_trc_inds, sample_stp_inds].copy())
-        rewards = self.to_torch(self._normalize_reward(self.her_replay_buffer_relabeled["reward"][sample_trc_inds, sample_stp_inds].copy(), env))
+        dones = self.to_torch(self.her_replay_buffer_relabeled["done"][sample_trc_inds, sample_stp_inds])
+        rewards = self.to_torch(self._normalize_reward(self.her_replay_buffer_relabeled["reward"][sample_trc_inds, sample_stp_inds], env))
 
         return DictReplayBufferSamples(
             observations=observations,

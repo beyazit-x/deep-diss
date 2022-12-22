@@ -61,7 +61,7 @@ class DissRelabeler():
             dfa_done = 0.0
         return dfa_reward, dfa_done
 
-    def relabel_old(self, env, batch_size):
+    def relabel_diss(self, env, batch_size):
 
         planner = NNPlanner(self.env, self.model)
 
@@ -123,7 +123,81 @@ class DissRelabeler():
 
 
 
-    def relabel(self, env, batch_size):
+    def relabel_baseline(self, env, batch_size):
+        n = 2
+        samples = self.replay_buffer.sample_traces(n, env) # This should also return actions
+        if samples is None:
+            return
+        features, dfas = samples.observations["features"], samples.observations["dfa"]
+        actions = samples.actions
+        next_features, next_dfas = samples.next_observations["features"], samples.next_observations["dfa"]
+        dones = samples.dones
+        rewards = samples.rewards
+        end_of_episode_inds, end_of_step_inds = dones.squeeze().nonzero()
+        for end_of_episode_ind, end_of_step_ind in zip(end_of_episode_inds, end_of_step_inds):
+            # dfa_int = int("".join([str(int(bit)) for bit in dfas[end_of_episode_ind][75].flatten().tolist()]), 2)
+            # dfa = DFA.from_int(dfa_int, self.propositions)
+            # dfa_dict, current_state = dfa2dict(dfa)
+            # dfa = dict2dfa(dfa_dict, start=current_state)
+            # print(dfa)
+            # print("__")
+
+            events = self.env.get_events_given_obss(features[end_of_episode_ind])
+            events_clean = list(filter(lambda x: x != "", self.env.get_events_given_obss(features[end_of_episode_ind])))
+
+            # print(events)
+
+            dfa_int = int("".join([str(int(bit)) for bit in dfas[end_of_episode_ind][0].flatten().tolist()]), 2)
+            dfa = DFA.from_int(dfa_int, self.propositions)
+            accepting_state = dfa.transition(events_clean)
+            dfa_dict, current_state = dfa2dict(dfa)
+            dfa_dict[accepting_state] = (True, dfa_dict[accepting_state][1])
+            dfa = dict2dfa(dfa_dict, start=current_state)
+            dfa_binary_seq = self.get_binary_seq(dfa)
+            dfas[end_of_episode_ind][0] = dfa_binary_seq
+
+            next_dfa = dfa.advance("".join(events[:1]))
+            next_dfa_dict, next_current_state = dfa2dict(next_dfa)
+            next_dfa_dict[accepting_state] = (True, next_dfa_dict[accepting_state][1])
+            next_dfa = dict2dfa(next_dfa_dict, start=next_current_state)
+            next_dfa_binary_seq = self.get_binary_seq(next_dfa)
+            next_dfas[end_of_episode_ind][0] = next_dfa_binary_seq
+
+            for step_ind in range(1, end_of_step_ind):
+                dfa = dfa.advance("".join(events[:step_ind + 1]))
+                dfa = dfa.minimize()
+                dfa_binary_seq = self.get_binary_seq(dfa)
+                dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
+
+                next_dfa = next_dfa.advance("".join(events[:step_ind + 1]))
+                next_dfa = next_dfa.minimize()
+                next_dfa_binary_seq = self.get_binary_seq(next_dfa)
+                next_dfas[end_of_episode_ind][step_ind] = next_dfa_binary_seq
+
+                reward, done = self.get_reward_and_done(dfa)
+                dones[end_of_episode_ind][step_ind] = done
+                rewards[end_of_episode_ind][step_ind] = reward
+
+                if done:
+                    features[end_of_episode_ind][step_ind + 1:] = np.zeros(features[end_of_episode_ind][step_ind + 1:].shape)
+                    dfas[end_of_episode_ind][step_ind + 1:] = np.zeros(dfas[end_of_episode_ind][step_ind + 1:].shape)
+                    actions[end_of_episode_ind][step_ind + 1:] = np.zeros(actions[end_of_episode_ind][step_ind + 1:].shape)
+                    next_features[end_of_episode_ind][step_ind + 1:] = np.zeros(next_features[end_of_episode_ind][step_ind + 1:].shape)
+                    dones[end_of_episode_ind][step_ind + 1:] = np.zeros(dones[end_of_episode_ind][step_ind + 1:].shape)
+                    rewards[end_of_episode_ind][step_ind + 1:] = np.zeros(rewards[end_of_episode_ind][step_ind + 1:].shape)
+                    break
+            
+            # dfa_int = int("".join([str(int(bit)) for bit in dfas[end_of_episode_ind][75].flatten().tolist()]), 2)
+            # dfa = DFA.from_int(dfa_int, self.propositions)
+            # dfa_dict, current_state = dfa2dict(dfa)
+            # dfa = dict2dfa(dfa_dict, start=current_state)
+            # print(dfa)
+            # input(">>")
+        self.replay_buffer.relabel_traces(n, samples)
+
+
+
+    def relabel_old(self, env, batch_size):
         # TODO: Currently minimize method and the advance method changes the state names.
         # If we can make sure that these methods do not change the state names, then we
         # can easily label reached state as the accepting state.

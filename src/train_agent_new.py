@@ -17,6 +17,7 @@ from diss_replay_buffer import DissReplayBuffer
 def learn_with_diss(
         model: OffPolicyAlgorithm,
         env,
+        relabeler_name,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
@@ -29,7 +30,7 @@ def learn_with_diss(
         progress_bar: bool = False,
     ) -> OffPolicyAlgorithm:
 
-    relabaler = DissRelabeler(model, env)
+    relabeler = DissRelabeler(model, env)
 
     total_timesteps, callback = model._setup_learn(
         total_timesteps,
@@ -66,7 +67,10 @@ def learn_with_diss(
             # Special case when the user passes `gradient_steps=0`
             if gradient_steps > 0:
                 model.train(batch_size=model.batch_size, gradient_steps=gradient_steps)
-                relabaler.relabel(model._vec_normalize_env, model.batch_size)
+                if relabeler_name == "diss":
+                    relabeler.relabel_diss(model._vec_normalize_env, model.batch_size)
+                elif relabeler_name == "baseline":
+                    relabeler.relabel_baseline(model._vec_normalize_env, model.batch_size)
 
     callback.on_training_end()
 
@@ -78,6 +82,8 @@ parser.add_argument("--env", required=True,
                         help="name of the environment to train on (REQUIRED)")
 parser.add_argument("--sampler", default="Default",
                     help="the ltl formula template to sample from (default: DefaultSampler)")
+parser.add_argument("--relabeler", default="diss",
+                    help="baseline | diss")
 parser.add_argument("--seed", type=int, default=1,
                         help="random seed (default: 1)")
 
@@ -106,7 +112,7 @@ model = DQN(
     verbose=1
     )
 
-learn_with_diss(model, env, total_timesteps=10000000)
+learn_with_diss(model, env, args.relabeler, total_timesteps=10000000)
 
 model.save("dqn")
 

@@ -196,6 +196,8 @@ class LetterEnv(gym.Env):
             return self.map[self.agent]
         return ""
 
+    def get_events_given_obss(self, obss):
+        return [self.get_events_given_obs(obs) for obs in obss]
 
     def get_events_given_obs(self, obs):
         obs = obs.squeeze()
