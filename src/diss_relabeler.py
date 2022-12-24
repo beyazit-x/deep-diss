@@ -61,7 +61,7 @@ class DissRelabeler():
             dfa_done = 0.0
         return dfa_reward, dfa_done
 
-    def relabel_diss(self, env, batch_size):
+    def relabel_diss(self, batch_size):
 
         planner = NNPlanner(self.env, self.model)
 
@@ -79,8 +79,8 @@ class DissRelabeler():
             try_reach_avoid=True, # TODO check this flag
         )
 
-        n = 1
-        samples = self.replay_buffer.sample_traces(n, env) # This should also return actions
+        n = batch_size
+        samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
         observations = samples.observations
         # shape of features is (n, 76, 7, 7, 13)
         features, dfas = observations["features"], observations["dfa"]
@@ -123,12 +123,14 @@ class DissRelabeler():
 
 
 
-    def relabel_baseline(self, env, batch_size):
-        n = 2
+    def relabel_baseline(self, batch_size):
+        # print("RUNNING RELABELER")
+        n = batch_size
 
-        samples = self.replay_buffer.sample_traces(n, env) # This should also return actions
+        samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
         if samples is None:
             return
+        # print(samples.observations["features"].shape)
 
         features, dfas = samples.observations["features"], samples.observations["dfa"]
         actions = samples.actions
@@ -207,12 +209,12 @@ class DissRelabeler():
 
 
 
-    def relabel_old(self, env, batch_size):
+    def relabel_old(self, batch_size):
         # TODO: Currently minimize method and the advance method changes the state names.
         # If we can make sure that these methods do not change the state names, then we
         # can easily label reached state as the accepting state.
-        n = 1
-        samples = self.replay_buffer.sample_traces(n, env) # This should also return actions
+        n = batch_size
+        samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
         if samples is None:
             return
         # observations = samples.observations
