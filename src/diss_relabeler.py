@@ -81,6 +81,9 @@ class DissRelabeler():
 
         n = batch_size
         samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
+        if samples == None:
+            print("none")
+            return
         observations = samples.observations
         # shape of features is (n, 76, 7, 7, 13)
         features, dfas = observations["features"], observations["dfa"]
@@ -100,7 +103,7 @@ class DissRelabeler():
                 surprise_weight=1,
                 size_weight=1/50,
                 sgs_temp=1/4,
-                example_drop_prob=1/20, #1e-2,
+                example_drop_prob=1e-2, #1e-2,
                 synth_timeout=20,
             )
 
