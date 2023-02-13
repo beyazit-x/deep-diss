@@ -26,8 +26,7 @@ class NNPolicyWrapper:
         """ use this for Bayes rule in the future to estimate DFA satisfaction probability """
         raise NotImplemented
 
-    def policy_probability(self, feature, a):
-        # TODO make this a softmax from the q values
+    def policy_probability_epsilon_exploration(self, feature, a):
         obs = self.feature2obs(feature)
         random_likelihood = self.policy.exploration_rate / float(self.policy.action_space.n)
         policy_action, _  = self.policy.predict(obs, deterministic=True) 
@@ -35,6 +34,14 @@ class NNPolicyWrapper:
             return (1 - self.policy.exploration_rate) + random_likelihood
         else:
             return random_likelihood
+
+    def policy_probability(self, feature, a):
+        # softmax from the q values
+        obs = self.feature2obs(feature)
+        q_values = self.policy.policy.q_net(obs).detach().squeeze()
+        exp_q_values = np.exp(q_values)
+        likelihoods = exp_q_values / exp_q_values.sum()
+        return likelihoods[a]
 
     def transition_probability(self, feature, a, next_feature):
         return self.env.transition_probability(feature, a, next_feature)
@@ -163,11 +170,7 @@ class NNMarkovChain(AnnotatedMarkovChain):
         ATTEMPTS = 100
         for i in range(ATTEMPTS):
             path, prob, is_win = self._sample(pivot, win)
-            # print("TRYING", i, is_win, win)
-            # print(self.dfa_goal)
             if is_win == win:
-                # print("IT IS A WIN!!!")
-                # input(">>")
                 return path, prob
 
 
