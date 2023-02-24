@@ -18,6 +18,8 @@ from stable_baselines3.common.type_aliases import (
     RolloutBufferSamples,
 )
 
+import time
+
 # TODO: How to delete stuff from her replay buffer if it is full?
 # Once the deletion strategy for traces is decided, clear (fill with zeros) trace slots in the her replay buffer.
 # TODO: How to compute reward wrt to the achieved goal? And where to do it?
@@ -81,6 +83,7 @@ class DissReplayBuffer(DictReplayBuffer):
         done: np.ndarray,
         infos: List[Dict[str, Any]],
     ) -> None:
+        # start = time.time()
         super().add(obs, next_obs, action, reward, done, infos)
         for i in range(self.n_envs):
             self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(obs["features"][i]).copy()
@@ -104,11 +107,14 @@ class DissReplayBuffer(DictReplayBuffer):
                 self.her_replay_buffer_not_relabeled["next_features"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["next_features"][i][self.current_episode_idx_not_relabeled[i]].shape)
                 self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]].shape)
                 self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]].shape)
+        # print('add', time.time()-start) TODO REMOVE TIMES
 
 
     def sample_traces(self, batch_size, env):
+        # start = time.time()
         n_not_relabeled_traces = len(self.not_relabeled_traces)
         if batch_size > n_not_relabeled_traces or batch_size <= 0:
+            print('sample_traces', time.time()-start)
             return None
         sample_inds = np.array(self.not_relabeled_traces[:batch_size])
         self.not_relabeled_traces = self.not_relabeled_traces[batch_size:]
@@ -124,6 +130,7 @@ class DissReplayBuffer(DictReplayBuffer):
         dones = self.her_replay_buffer_not_relabeled["done"][sample_env_inds, sample_eps_inds]
         rewards = self._normalize_reward(self.her_replay_buffer_not_relabeled["reward"][sample_env_inds, sample_eps_inds], env)
 
+        # print('sample_traces', time.time()-start)
         return DictReplayBufferSamples(
             observations=observations,
             actions=actions,

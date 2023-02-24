@@ -10,7 +10,6 @@ from gnns.graphs.GNN import GNNMaker
 from utils.parameters import FEATURE_SIZE
 from dfa import DFA
 from dfa.utils import dfa2dict
-from copy import deepcopy
 
 ########################################################################
 import ring
@@ -22,7 +21,7 @@ import pickle
 import dill
 import numpy as np
 import networkx as nx
-from copy import deepcopy
+from copy import deepcopy, copy
 from pysat.solvers import Solver
 from pythomata.impl.simple import SimpleNFA as NFA 
 from scipy.special import softmax
@@ -188,7 +187,6 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         for node in nxg.nodes:
             nxg.add_edge(node, node, type=1)
 
-
         return nxg
 
     def get_dfa_from_binary_seq(self, dfa_binary_seq):
@@ -213,4 +211,5 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
 
     def forward(self, observations) -> th.Tensor:
         features, dfa_binary_seqs = observations["features"], observations["dfa"]
-        return self.get_obs(features, dfa_binary_seqs)
+        result = self.get_obs(features, dfa_binary_seqs)
+        return result

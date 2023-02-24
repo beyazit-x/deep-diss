@@ -18,6 +18,10 @@ from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 
 from diss_interface import NNPlanner
 
+
+DISS_ARGMAX = False
+DISS_SOFTMAX_SAMPLE = not DISS_ARGMAX
+
 class DissRelabeler():
 
     def __init__(self, model, env):
@@ -82,6 +86,8 @@ class DissRelabeler():
 
         n = batch_size
         samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
+        if samples == None:
+            return
         observations = samples.observations
         # shape of features is (n, 76, 7, 7, 13)
         features, dfas = observations["features"], observations["dfa"]
@@ -101,7 +107,7 @@ class DissRelabeler():
                 surprise_weight=1,
                 size_weight=1/50,
                 sgs_temp=1/4,
-                example_drop_prob=1/20, #1e-2,
+                example_drop_prob=1e-2, #1e-2,
                 synth_timeout=20,
             )
 
@@ -115,10 +121,21 @@ class DissRelabeler():
                 dfas.append(concept.dfa)
                 energies.append(metadata['energy'])
 
-            idx_min = np.argmin(energies)
-            dfa_min = dfas[idx_min]
-            relabeled_dfas.append(dfa_min)
-            print('adding', dfa_min) 
+            print("SAMPLING")
+            if DISS_ARGMAX:
+                idx_min = np.argmin(energies)
+                dfa_min = dfas[idx_min]
+                relabeled_dfa = dfa_min
+            elif DISS_SOFTMAX_SAMPLE:
+                print(energies)
+                exp_energies = np.exp(energies) # TODO make this temperature tuneable
+                likelihood = exp_energies / exp_energies.sum()
+                print(likelihood)
+                softmax_sampled_dfa = np.random.choice(dfas, p=likelihood)
+                print("chose", dfas.index(softmax_sampled_dfa))
+                relabeled_dfa = softmax_sampled_dfa
+            print('adding', relabeled_dfa) 
+            relabeled_dfas.append(relabeled_dfa)
 
         # TODO use relabeled_dfas to rewrite the buffer here
 
