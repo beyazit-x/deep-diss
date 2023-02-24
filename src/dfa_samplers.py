@@ -248,6 +248,85 @@ class UniversalSampler(DFASampler):
 
         return deepcopy(np.random.choice(self.enumerated_dfas, p=self.weights))
 
+
+class LetterworldChainSampler(DFASampler):
+    def __init__(self, propositions):
+        super().__init__(propositions)
+        self.chain_length = 9
+
+    def sample_dfa_formula(self):
+
+        prop_order = random.choices(self.propositions, k=self.chain_length)
+
+        def transition(s, c):
+            if s < self.chain_length and c == prop_order[s]:
+                s = s + 1
+            return s
+
+        fixed_dfa = dfa.DFA(start=0,
+                            inputs=self.propositions,
+                            outputs={False, True},
+                            label=lambda s: s == self.chain_length,
+                            transition=transition)
+
+        return fixed_dfa
+
+class FixedLetterworldChainSampler(DFASampler):
+    def __init__(self, propositions):
+        super().__init__(propositions)
+        self.chain_length = 10
+
+    def transition(self, s, c):
+        if c == self.propositions[s] and s < self.chain_length:
+            s = s + 1
+        return s
+
+
+    def sample_dfa_formula(self):
+        fixed_dfa = dfa.DFA(start=0,
+                            inputs=self.propositions,
+                            outputs={False, True},
+                            label=lambda s: s == self.chain_length,
+                            transition=self.transition)
+
+        return fixed_dfa
+
+class FixedLetterworldSampler(DFASampler):
+    def __init__(self, propositions):
+        super().__init__(propositions)
+
+    def transition(self, s, c):
+        red, blue, yellow, green = self.propositions[0:4]
+        if s == 0:
+            if c == red:
+                s = 1 # fail
+            elif c == blue:
+                s = 2 # got wet
+            elif c == yellow:
+                s = 3 # success
+        elif s == 2:
+            if c == red or c == yellow:
+                s = 1 # fail
+            elif c == green:
+                s = 0 # back to start
+        elif s == 3:
+            if c == blue:
+                s = 2 # got wet
+            if c == red:
+                s = 1 # fail
+
+        return s
+
+
+    def sample_dfa_formula(self):
+        fixed_dfa = dfa.DFA(start=0,
+                            inputs=self.propositions,
+                            outputs={False, True},
+                            label=lambda s: s == 3,
+                            transition=self.transition)
+
+        return fixed_dfa
+
 class FixedGridworldSampler(DFASampler):
     def __init__(self, propositions):
         super().__init__(propositions)
@@ -540,6 +619,12 @@ def getDFASampler(sampler_id, propositions):
         return UniversalSampler(propositions, tokens[1])
     elif (tokens[0] == "FixedGridworld"):
         return FixedGridworldSampler(propositions)
+    elif (tokens[0] == "FixedLetterworld"):
+        return FixedLetterworldSampler(propositions)
+    elif (tokens[0] == "FixedLetterworldChain"):
+        return FixedLetterworldChainSampler(propositions)
+    elif (tokens[0] == "LetterworldChain"):
+        return LetterworldChainSampler(propositions)
     else: # "Default"
         return DefaultSampler(propositions)
 
@@ -555,6 +640,7 @@ if __name__ == '__main__':
     sampler_id = sys.argv[1]
     sampler = getDFASampler(sampler_id, props)
     draw_path = "sample_dfa.png"
-    dfa = sampler.sample()
-    draw(dfa, draw_path)
+    dfa = sampler.sample_dfa_formula()
+    print(dfa)
+    # draw(dfa, draw_path)
 

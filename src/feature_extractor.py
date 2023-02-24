@@ -42,7 +42,6 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
 
         self.env = env
         self.propositions = env.get_propositions()
-        self.prev_preprocessed_dfa = None
 
         self.text_embedding_size = 32
         self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", max(FEATURE_SIZE, len(self.propositions) + 10), self.text_embedding_size)
@@ -115,7 +114,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
                 return False
         return True
 
-    def dfa2nxg(self, mvc_dfa, minimize=True):
+    def dfa2nxg(self, mvc_dfa, minimize=False):
         """ converts a mvc format dfa into a networkx dfa """
 
         if minimize:
@@ -205,8 +204,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         dfa_nxgs = [self.get_dfa_from_binary_seq(dfa_binary_seq) for dfa_binary_seq in dfa_binary_seqs]
         dfa_obs = {'features': features,'text': dfa_nxgs}
 
-        preprocessed_obs = utils.my_preprocess_obss(dfa_obs, self.propositions, done=done, progression_info=progression_info, prev_preprocessed_obs=self.prev_preprocessed_dfa, device=self.device)
-        self.prev_preprocessed_dfa = preprocessed_obs.text
+        preprocessed_obs = utils.my_preprocess_obss(dfa_obs, self.propositions, done=done, progression_info=progression_info, prev_preprocessed_obs=None, device=self.device)
 
         embedding = self.env_model(preprocessed_obs)
         embed_gnn = self.gnn(preprocessed_obs.text)

@@ -15,6 +15,43 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Rollout
 from diss_relabeler import DissRelabeler
 from diss_replay_buffer import DissReplayBuffer
 
+class DiscountedRewardCallback(BaseCallback):
+    """
+    Custom callback for plotting additional values in tensorboard.
+    """
+
+    def __init__(self, gamma, verbose=0):
+        self.gamma = gamma
+        self.discounted_return_sum = 0.0
+        self.num_episodes = 1
+
+        super(DiscountedRewardCallback, self).__init__(verbose)
+
+    def _on_step(self):
+        # Log scalar value (here a random variable)
+        dones = self.locals["dones"]
+        infos = self.locals["infos"]
+
+        for idx, done in enumerate(dones):
+            info = infos[idx]
+            if (
+                done
+                and info.get("episode") is not None
+            ):
+                episode_info = info["episode"]
+                discounted_return = episode_info['r'] * self.gamma ** episode_info['l']
+                self.discounted_return_sum += discounted_return
+                self.num_episodes += 1
+
+
+        return True
+
+    def _on_rollout_end(self):
+        ep_disc_rew_mean = self.discounted_return_sum/self.num_episodes
+        self.logger.record("rollout/ep_disc_rew_mean", ep_disc_rew_mean)
+        discounted_return_sum = 0.0
+
+
 async def relabel(relabeler, relabeler_name, batch_size):
     if relabeler_name == "diss":
         relabeler.relabel_diss(batch_size)
@@ -127,21 +164,47 @@ if __name__ == "__main__":
     check_env(env)
     print("------------------------------------------------")
 
-    model = DQN(
-        "MultiInputPolicy",
-        env,
-        # learning_starts=1000,
-        policy_kwargs=dict(
-            features_extractor_class=CustomCombinedExtractor,
-            features_extractor_kwargs=dict(env=env)
-            ),
-        replay_buffer_class=DissReplayBuffer,
-        replay_buffer_kwargs=dict(
-            max_episode_length=env.timeout,
-            her_replay_buffer_size=10
-            ),
-        verbose=1
-        )
+    gamma = 0.94
 
-    asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", total_timesteps=10000000))
+    discounted_reward_callback = DiscountedRewardCallback(gamma)
+
+
+    if args.relabeler == 'none':
+        model = DQN(
+            "MultiInputPolicy",
+            env,
+            policy_kwargs=dict(
+                features_extractor_class=CustomCombinedExtractor,
+                features_extractor_kwargs=dict(env=env)
+                ),
+            verbose=1,
+            tensorboard_log="./depth9_tensorboard/no_relabel",
+            learning_starts=50000,
+            batch_size=10,
+            gamma=gamma
+            )
+        model.learn(total_timesteps=3000000, callback=discounted_reward_callback)
+    else:
+        model = DQN(
+            "MultiInputPolicy",
+            env,
+            policy_kwargs=dict(
+                features_extractor_class=CustomCombinedExtractor,
+                features_extractor_kwargs=dict(env=env)
+                ),
+            replay_buffer_class=DissReplayBuffer,
+            replay_buffer_kwargs=dict(
+                max_episode_length=env.timeout,
+                her_replay_buffer_size=5000
+                ),
+            learning_starts=50000,
+            batch_size=10,
+            gamma=gamma,
+            verbose=1,
+            tensorboard_log="./depth9_tensorboard/baseline_relabel"
+            )
+
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=3000000))
+
+
 

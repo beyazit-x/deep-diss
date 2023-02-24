@@ -148,13 +148,6 @@ def preprocess4gnn(texts, ast, device=None):
     return np.array([[ast(text).to(device)] for text in texts])
 
 def my_preprocess_obss(obs, props, done=None, progression_info=None, prev_preprocessed_obs=None, device=None):
-    done = [done] if done is not None else done
-    if done is not None:
-        done = [done]
-    if progression_info is not None:
-        progression_info = [progression_info]
-    if prev_preprocessed_obs is not None:
-        prev_preprocessed_obs =  [prev_preprocessed_obs] 
     return utils.DictList({
         "image": obs["features"],
         "text":  preprocess_nxgs(obs["text"], builder=utils.DFABuilder(props, None, None), done=done, progression_info=progression_info, prev_preprocessed_obs=prev_preprocessed_obs, device=device)

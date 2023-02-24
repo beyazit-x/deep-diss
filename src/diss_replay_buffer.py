@@ -7,6 +7,8 @@ import numpy as np
 import torch as th
 from gym import spaces
 
+from dfa import DFA, dfa2dict, dict2dfa
+
 from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.buffers import DictReplayBuffer
 from stable_baselines3.common.type_aliases import (
@@ -67,7 +69,7 @@ class DissReplayBuffer(DictReplayBuffer):
         self.current_episode_step_idx_not_relabeled = np.zeros(self.n_envs, dtype=np.int64)
         self.current_episode_idx_relabeled = 0
         self.is_her_replay_buffer_relabeled_full = False
-        self.her_ratio = 0.1
+        self.her_ratio = 0.5
         self.env_indices = np.arange(self.n_envs)
 
     def add(
@@ -183,6 +185,22 @@ class DissReplayBuffer(DictReplayBuffer):
         regular_batch_size = batch_size - her_batch_size
         regular_samples = super().sample(regular_batch_size, env)
         her_samples = self.get_her_transitions_from_inds(her_batch_size, env)
+
+        # samples = her_samples
+        # features, dfas = samples.observations["features"], samples.observations["dfa"]
+        # actions = samples.actions
+        # next_features, next_dfas = samples.next_observations["features"], samples.next_observations["dfa"]
+        # dones = samples.dones
+        # rewards = samples.rewards
+        # print(dfas.shape)
+        # for batch_idx in range(her_batch_size):
+        #     dfa_int = int("".join([str(int(bit)) for bit in dfas[batch_idx].flatten().tolist()]), 2)
+        #     dfa = DFA.from_int(dfa_int, ['a','b','c','d','e','f','g','h','i','j','k','l'])
+        #     dfa_dict, current_state = dfa2dict(dfa)
+        #     dfa = dict2dfa(dfa_dict, start=current_state)
+        #     print("~~~~", batch_idx, "~~~~")
+        #     print(dfa)
+
         if her_samples is None:
             her_samples = super().sample(her_batch_size, env)
         return DictReplayBufferSamples(
