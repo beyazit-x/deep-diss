@@ -252,7 +252,7 @@ class UniversalSampler(DFASampler):
 class LetterworldChainSampler(DFASampler):
     def __init__(self, propositions):
         super().__init__(propositions)
-        self.chain_length = 9
+        self.chain_length = 5
 
     def sample_dfa_formula(self):
 

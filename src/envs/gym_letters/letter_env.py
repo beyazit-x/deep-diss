@@ -295,6 +295,14 @@ class LetterEnvAgentCentricFixedMap7x7(LetterEnv):
     def __init__(self):
         super().__init__(grid_size=7, letters="aabbccddeeffgghhiijjkkll", use_fixed_map=True, use_agent_centric_view=True, timeout=75)
 
+class LetterEnvAgentCentricFixedMapShort7x7(LetterEnv):
+    def __init__(self):
+        super().__init__(grid_size=7, letters="aabbccddeeffgghhiijjkkll", use_fixed_map=True, use_agent_centric_view=True, timeout=10)
+
+class LetterEnvAgentCentricFixedMapMid7x7(LetterEnv):
+    def __init__(self):
+        super().__init__(grid_size=7, letters="aabbccddeeffgghhiijjkkll", use_fixed_map=True, use_agent_centric_view=True, timeout=20)
+
 
 
 # This code allow to play a game (for debugging purposes)

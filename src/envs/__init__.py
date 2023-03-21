@@ -76,6 +76,16 @@ register(
     entry_point='envs.gym_letters.letter_env:LetterEnvAgentCentricFixedMap7x7'
 )
 
+register(
+    id='Letter-7x7-v4',
+    entry_point='envs.gym_letters.letter_env:LetterEnvAgentCentricFixedMapShort7x7'
+)
+
+register(
+    id='Letter-7x7-v5',
+    entry_point='envs.gym_letters.letter_env:LetterEnvAgentCentricFixedMapMid7x7'
+)
+
 ### Minigrid Envs
 register(
     id='Adversarial-v0',

@@ -141,7 +141,6 @@ class DissRelabeler():
 
 
     def relabel_baseline(self, batch_size):
-        # print("RUNNING RELABELER")
         n = batch_size
 
         samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
@@ -170,15 +169,20 @@ class DissRelabeler():
             events = self.env.get_events_given_obss(features[end_of_episode_ind])
             events_clean = list(filter(lambda x: x != "", self.env.get_events_given_obss(features[end_of_episode_ind])))
 
-            chain_length = 9
+            chain_length = 5
 
             if len(events_clean) < chain_length:
                 continue
 
-            rand_idxs = sorted(random.sample(range(len(events_clean)), chain_length))
-            # print(rand_idxs)
+            # exp_base = 0.5
+            # probs = np.array([exp_base**i for i in range(1, len(events_clean)+1)])
+            # probs = probs / np.sum(probs)
+
+            probs = np.array([1 for i in range(1, len(events_clean)+1)])
+            probs = probs / np.sum(probs)
+
+            rand_idxs = sorted(np.random.choice(range(len(events_clean)), size=chain_length, replace=False, p=probs))
             sampled_events = [events_clean[idx] for idx in rand_idxs]
-            # print(sampled_events)
 
             def transition(s, c):
                 if s < chain_length and c == sampled_events[s]:
