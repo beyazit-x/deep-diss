@@ -65,6 +65,7 @@ class DissReplayBuffer(DictReplayBuffer):
             key: np.zeros((dim[0] * dim[1],) + dim[2:], dtype=np.float32) if key != "action" else np.zeros((dim[0] * dim[1],) + dim[2:], dtype=np.int64)
             for key, dim in self.input_shape.items()
         }
+        self.her_replay_buffer_relabeled["is_ready_to_use"] = np.zeros((self.n_envs * self.her_replay_buffer_size, self.max_episode_length + 1), dtype=bool)
         self.not_relabeled_traces = []
         self.episode_lengths = np.zeros((self.n_envs * self.her_replay_buffer_size), dtype=np.int64) # This should keep track of relabeled ones
         self.current_episode_idx_not_relabeled = np.zeros(self.n_envs, dtype=np.int64)
@@ -94,9 +95,10 @@ class DissReplayBuffer(DictReplayBuffer):
             self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(done[i]).copy()
             self.current_episode_step_idx_not_relabeled[i] += 1
             if done[i] or self.current_episode_step_idx_not_relabeled[i] > self.max_episode_length:
-                self.not_relabeled_traces.append((i, self.current_episode_idx_not_relabeled[i]))
-                self.current_episode_idx_not_relabeled[i] = (self.current_episode_idx_not_relabeled[i] + 1) % self.her_replay_buffer_size
                 self.current_episode_step_idx_not_relabeled[i] = 0
+                if reward[i] <= 0.0: # Only add negative examples
+                    self.not_relabeled_traces.append((i, self.current_episode_idx_not_relabeled[i]))
+                    self.current_episode_idx_not_relabeled[i] = (self.current_episode_idx_not_relabeled[i] + 1) % self.her_replay_buffer_size
                 if (i, self.current_episode_idx_not_relabeled[i]) in self.not_relabeled_traces:
                     self.not_relabeled_traces.remove((i, self.current_episode_idx_not_relabeled[i])) # We will start writing to that env-episode pair so remove
                 self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]].shape)
@@ -137,6 +139,10 @@ class DissReplayBuffer(DictReplayBuffer):
     def relabel_traces(self, batch_size, dict_replay_buffer_samples):
         if batch_size <= 0 :
             return
+
+        _, end_of_step_inds = dict_replay_buffer_samples.dones.squeeze().nonzero()
+        self.episode_lengths[self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = end_of_step_inds + 1
+
         self.her_replay_buffer_relabeled["features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["features"]
         self.her_replay_buffer_relabeled["dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.observations["dfa"]
         self.her_replay_buffer_relabeled["action"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.actions
@@ -144,24 +150,22 @@ class DissReplayBuffer(DictReplayBuffer):
         self.her_replay_buffer_relabeled["next_features"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["features"]
         self.her_replay_buffer_relabeled["next_dfa"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.next_observations["dfa"]
         self.her_replay_buffer_relabeled["done"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.dones
+        for i in range(batch_size):
+            self.her_replay_buffer_relabeled["is_ready_to_use"][self.current_episode_idx_relabeled + i][:end_of_step_inds[i] + 1] = True
 
-        _, end_of_step_inds = dict_replay_buffer_samples.dones.squeeze().nonzero()
-        self.episode_lengths[self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = end_of_step_inds
-        
         temp = self.current_episode_idx_relabeled
         self.current_episode_idx_relabeled = (self.current_episode_idx_relabeled + batch_size) % (self.n_envs * self.her_replay_buffer_size)
         if temp >= self.current_episode_idx_relabeled:
             self.is_her_replay_buffer_relabeled_full = True
 
     def get_her_transitions_from_inds(self, her_batch_size, env):
-        sample_space = None
-        if self.is_her_replay_buffer_relabeled_full:
-            sample_space = [(i, j) for i in range(self.n_envs * self.her_replay_buffer_size) for j in range(self.episode_lengths[i])]
-        else:
-            sample_space = [(i, j) for i in range(self.current_episode_idx_relabeled) for j in range(self.episode_lengths[i])]
-        if her_batch_size > len(sample_space):
+        sample_space = np.argwhere(self.her_replay_buffer_relabeled["is_ready_to_use"])
+        sample_space_size = sample_space.shape[0]
+        if her_batch_size > sample_space_size:
             return
-        sample_inds = np.array(random.sample(sample_space, her_batch_size))
+        sample_inds = sample_space[np.random.choice(sample_space_size, her_batch_size, replace=False)]
+        for sample_ind in sample_inds:
+            self.her_replay_buffer_relabeled["is_ready_to_use"][sample_ind[0]][sample_ind[1]] = False
         sample_trc_inds = sample_inds[:, 0]
         sample_stp_inds = sample_inds[:, 1]
 
