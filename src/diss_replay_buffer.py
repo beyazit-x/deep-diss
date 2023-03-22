@@ -152,6 +152,7 @@ class DissReplayBuffer(DictReplayBuffer):
         self.her_replay_buffer_relabeled["done"][self.current_episode_idx_relabeled : self.current_episode_idx_relabeled + batch_size] = dict_replay_buffer_samples.dones
         for i in range(batch_size):
             self.her_replay_buffer_relabeled["is_ready_to_use"][self.current_episode_idx_relabeled + i][:end_of_step_inds[i] + 1] = True
+            self.her_replay_buffer_relabeled["is_ready_to_use"][self.current_episode_idx_relabeled + i][end_of_step_inds[i] + 1:] = False
 
         temp = self.current_episode_idx_relabeled
         self.current_episode_idx_relabeled = (self.current_episode_idx_relabeled + batch_size) % (self.n_envs * self.her_replay_buffer_size)
