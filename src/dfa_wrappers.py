@@ -15,7 +15,7 @@ class DFAEnv(gym.Wrapper):
         self.propositions = self.env.get_propositions()
         self.sampler = dfa_samplers.getDFASampler(dfa_sampler, self.propositions)
 
-        self.N = 300 # TODO compute this
+        self.N = 80 # TODO compute this
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})

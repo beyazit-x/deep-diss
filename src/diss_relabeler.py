@@ -29,7 +29,7 @@ class DissRelabeler():
         self.env = env
         self.propositions = env.get_propositions()
         self.replay_buffer = model.replay_buffer
-        self.N = 300 # TODO get this from dfa_wrapper
+        self.N = 80 # TODO get this from dfa_wrapper
 
     def get_state_signature(self, state_id, dfa_dict):
         state = dfa_dict[state_id]

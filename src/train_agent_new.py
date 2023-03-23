@@ -2,6 +2,7 @@ import asyncio
 import argparse
 from utils import make_env
 from stable_baselines3 import DQN
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_checker import check_env
 from feature_extractor import CustomCombinedExtractor
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
@@ -159,10 +160,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     env = make_env(args.env, args.sampler, seed=args.seed)
+    # single_env = env
+    # num_env = 8
+    # env = DummyVecEnv([lambda: make_env(args.env, args.sampler, seed=args.seed+i) for i in range(num_env)])
+    # env = VecMonitor(env)
+    # single_env = make_env(args.env, args.sampler)
 
     print("------------------------------------------------")
     print(env)
-    check_env(env)
+    # check_env(env)
     print("------------------------------------------------")
 
     gamma = 1.0
@@ -176,15 +182,16 @@ if __name__ == "__main__":
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env)
+                features_extractor_kwargs=dict(env=env),
                 ),
             verbose=1,
-            tensorboard_log="./distr_depth5_horizon20_tensorboard/no_relabel",
-            learning_starts=50000,
+            # tensorboard_log="./distr_depth5_horizon20_tensorboard/no_relabel",
+            tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_parallel",
+            learning_starts=100000,
             batch_size=10,
-            gamma=gamma
+            gamma=gamma,
             )
-        model.learn(total_timesteps=2500000, callback=discounted_reward_callback)
+        model.learn(total_timesteps=5000000, callback=discounted_reward_callback)
     else:
         model = DQN(
             "MultiInputPolicy",
@@ -199,13 +206,13 @@ if __name__ == "__main__":
                 her_replay_buffer_size=1000000
                 ),
             verbose=1,
-            learning_starts=50000,
+            learning_starts=100000,
             batch_size=10,
             gamma=gamma,
             tensorboard_log="./distr_depth5_horizon20_tensorboard/baseline_relabel_ratio0.1"
             )
 
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=2500000))
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=5000000))
 
 
 
