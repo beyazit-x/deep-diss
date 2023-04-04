@@ -188,7 +188,8 @@ class DissReplayBuffer(DictReplayBuffer):
         )
 
     def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> DictReplayBufferSamples:
-        her_batch_size = int(self.her_ratio * batch_size)
+        # her_batch_size = int(self.her_ratio * batch_size)
+        her_batch_size = (np.random.geometric(p=self.her_ratio, size=batch_size) == 1).sum()
         regular_batch_size = batch_size - her_batch_size
         regular_samples = super().sample(regular_batch_size, env)
         her_samples = self.get_her_transitions_from_inds(her_batch_size, env)
