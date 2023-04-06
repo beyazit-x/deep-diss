@@ -185,8 +185,7 @@ if __name__ == "__main__":
                 features_extractor_kwargs=dict(env=env),
                 ),
             verbose=1,
-            # tensorboard_log="./distr_depth5_horizon20_tensorboard/no_relabel",
-            tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_parallel",
+            tensorboard_log="./distr_depth5_horizon20_tensorboard/no_relabel",
             learning_starts=100000,
             batch_size=10,
             gamma=gamma,
@@ -209,7 +208,7 @@ if __name__ == "__main__":
             learning_starts=100000,
             batch_size=10,
             gamma=gamma,
-            tensorboard_log="./distr_depth5_horizon20_tensorboard/baseline_relabel_ratio0.1"
+            tensorboard_log="./distr_depth5_horizon20_tensorboard/baseline_relabel_ratio0.1_new"
             )
 
         asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=5000000))

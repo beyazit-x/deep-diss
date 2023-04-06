@@ -1,4 +1,6 @@
 import dgl
+import numpy as np
+import networkx as nx
 
 edge_types = ["none", "self", "normal-to-temp", "temp-to-normal"] # We had to add "none" here because of the way typed_adj_matrix is constructed. Does that break things?
 DGL5_COMPAT = True
@@ -9,11 +11,12 @@ code can generate graphs in either Networkx or DGL formats. And uses caching to 
 generated graphs.
 """
 class DFABuilder(object):
-    def __init__(self, propositions, use_mean_guard_embed, use_onehot_guard_embed):
+    def __init__(self, propositions, use_mean_guard_embed, use_onehot_guard_embed, device):
         super(DFABuilder, self).__init__()
         self.props = propositions
         self.use_mean_guard_embed = use_mean_guard_embed
         self.use_onehot_guard_embed = use_onehot_guard_embed
+        self.device = device
 
     def __call__(self, nxg, library="dgl"):
         """print(formula)
@@ -32,8 +35,9 @@ class DFABuilder(object):
 
         # convert the Networkx graph to dgl graph and pass the 'feat' attribute
         if DGL5_COMPAT:
-            g = dgl.from_networkx(nxg, node_attrs=["feat", "is_root"], edge_attrs=["type"]) # dgl does not support string attributes (i.e., token)
+            # print(nx.get_node_attributes(nxg, 'feat'))
+            g = dgl.from_networkx(nxg, node_attrs=np.array(["feat", "is_root"]), edge_attrs=np.array(["type"]), device=self.device) # dgl does not support string attributes (i.e., token)
         else:
             g = dgl.DGLGraph()
-            g.from_networkx(nxg, node_attrs=["feat", "is_root"], edge_attrs=["type"]) # dgl does not support string attributes (i.e., token)
+            g.from_networkx(nxg, node_attrs=np.array(["feat", "is_root"]), edge_attrs=np.array(["type"]), device=self.device) # dgl does not support string attributes (i.e., token)
         return g
