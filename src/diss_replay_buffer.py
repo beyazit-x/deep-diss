@@ -84,7 +84,7 @@ class DissReplayBuffer(DictReplayBuffer):
         done: np.ndarray,
         infos: List[Dict[str, Any]],
     ) -> None:
-        super().add(obs, next_obs, action, reward, done, infos)
+
         for i in range(self.n_envs):
             self.her_replay_buffer_not_relabeled["features"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(obs["features"][i]).copy()
             self.her_replay_buffer_not_relabeled["dfa"][i][self.current_episode_idx_not_relabeled[i]][self.current_episode_step_idx_not_relabeled[i]] = np.array(obs["dfa"][i]).copy()
@@ -109,6 +109,7 @@ class DissReplayBuffer(DictReplayBuffer):
                 self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["next_dfa"][i][self.current_episode_idx_not_relabeled[i]].shape)
                 self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]] = np.zeros(self.her_replay_buffer_not_relabeled["done"][i][self.current_episode_idx_not_relabeled[i]].shape)
 
+        super().add(obs, next_obs, action, reward, done, infos)
 
     def sample_traces(self, batch_size, env):
         n_not_relabeled_traces = len(self.not_relabeled_traces)

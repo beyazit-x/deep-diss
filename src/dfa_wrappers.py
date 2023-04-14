@@ -30,8 +30,12 @@ class DFAEnv(gym.Wrapper):
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})
 
-        self.dfa_goal = None
+        self.dfa_goal_int = None
         self.dfa_goal_binary_seq = None
+
+    @property
+    def dfa_goal(self):
+        return DFA.from_int(self.dfa_goal_int, self.propositions)
 
     def sample_dfa_goal(self):
         # This function must return a DFA for a task.
@@ -58,7 +62,7 @@ class DFAEnv(gym.Wrapper):
     def reset(self):
         self.known_progressions = {}
         self.obs = self.env.reset()
-        self.dfa_goal = self.sample_dfa_goal()
+        self.dfa_goal_int = self.sample_dfa_goal().to_int()
         self.dfa_goal_binary_seq = self.get_binary_seq(self.dfa_goal)
         dfa_obs = {"features": self.obs, "dfa": self.dfa_goal_binary_seq}
         return dfa_obs
@@ -114,7 +118,7 @@ class DFAEnv(gym.Wrapper):
         next_dfa_goal = self.dfa_goal.advance(truth_assignment)
         if next_dfa_goal != self.dfa_goal:
             next_dfa_goal = next_dfa_goal.minimize()
-            self.dfa_goal = next_dfa_goal
+            self.dfa_goal_int = next_dfa_goal.to_int()
             self.dfa_goal_binary_seq = self.get_binary_seq(self.dfa_goal)
 
         dfa_reward, dfa_done = self.get_reward_and_done()

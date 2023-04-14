@@ -40,7 +40,7 @@ def get_obss_preprocessor(env, gnn, progression_mode, use_dfa, use_mean_guard_em
 
                 vocab = Vocabulary(vocab_space)
 
-                tree_builder = utils.DFABuilder(vocab_space["tokens"], use_mean_guard_embed, use_onehot_guard_embed)
+                tree_builder = utils.DFABuilder(vocab_space["tokens"], use_mean_guard_embed, use_onehot_guard_embed, device=None)
                 def preprocess_obss(obss, done=None, progression_info=None, prev_preprocessed_obs=None, device=None):
                     return utils.DictList({
                         "image": preprocess_images([obs["features"] for obs in obss], device=device),
@@ -105,13 +105,13 @@ def preprocess_nxgs(nxgs, builder, done=None, progression_info=None, prev_prepro
     This function receives DFA represented as NetworkX graphs and convert them into inputs for a GNN
     """
     if done is None or progression_info is None or prev_preprocessed_obs is None:
-        return np.array([[builder(nxg).to(device)] for nxg in nxgs])
+        return np.array([[builder(nxg)] for nxg in nxgs])
     else:
         new_dfas = []
         for i in range(len(progression_info)):
             if done[i] or progression_info[i] != 0.0:
                 # either the episode ended or we progressed
-                new_dfas.append([builder(nxgs[i]).to(device)])
+                new_dfas.append([builder(nxgs[i])])
             else:
                 # the episode did not end and we didn't progress
                 new_dfas.append(prev_preprocessed_obs[i])
@@ -150,7 +150,7 @@ def preprocess4gnn(texts, ast, device=None):
 def my_preprocess_obss(obs, props, done=None, progression_info=None, prev_preprocessed_obs=None, device=None):
     return utils.DictList({
         "image": obs["features"],
-        "text":  preprocess_nxgs(obs["text"], builder=utils.DFABuilder(props, None, None), done=done, progression_info=progression_info, prev_preprocessed_obs=prev_preprocessed_obs, device=device)
+        "text":  preprocess_nxgs(obs["text"], builder=utils.DFABuilder(props, None, None, device=device), done=done, progression_info=progression_info, prev_preprocessed_obs=prev_preprocessed_obs, device=device)
     })
 
 
