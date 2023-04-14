@@ -18,7 +18,6 @@ class NNPolicyWrapper:
         self.policy = policy
         self.dfa_goal = dfa_goal
         self.env = env
-        self.N = 1000
 
         self.predict = self.policy.predict
 
@@ -53,7 +52,7 @@ class NNPolicyWrapper:
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
         binary_seq = np.array([int(i) for i in binary_string])
-        return np.pad(binary_seq, (self.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
+        return np.pad(binary_seq, (self.env.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
 
 class NNPlanner:

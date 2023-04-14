@@ -33,6 +33,18 @@ class DFASampler():
     def __init__(self, propositions):
         self.propositions = propositions
 
+    def get_n_states(self):
+        raise NotImplemented
+
+    def get_n_accepting_states(self):
+        raise NotImplemented
+
+    def get_n_alphabet(self):
+        raise NotImplemented
+
+    def get_n_transitions(self):
+        raise NotImplemented
+
     def sample_dfa_formula(self):
         raise NotImplemented
 
@@ -254,6 +266,19 @@ class LetterworldChainSampler(DFASampler):
         super().__init__(propositions)
         self.chain_length = 5
 
+    def get_n_states(self):
+        return self.chain_length + 1
+
+    def get_n_accepting_states(self):
+        return 1
+
+    def get_n_alphabet(self):
+        print(self.propositions)
+        return len(self.propositions) + 1 # +1 is for empty string
+
+    def get_n_transitions(self):
+        return self.chain_length
+
     def sample_dfa_formula(self):
 
         prop_order = random.choices(self.propositions, k=self.chain_length)
@@ -268,6 +293,8 @@ class LetterworldChainSampler(DFASampler):
                             outputs={False, True},
                             label=lambda s: s == self.chain_length,
                             transition=transition)
+
+        # print(len(fixed_dfa.states())) # This returns 6 for chain length 5
 
         return fixed_dfa
 

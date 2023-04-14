@@ -8,6 +8,7 @@ from envs.safety.zones_env import zone
 import networkx as nx
 import pickle
 from dfa import DFA
+import math
 
 class DFAEnv(gym.Wrapper):
     def __init__(self, env, dfa_sampler=None):
@@ -15,7 +16,16 @@ class DFAEnv(gym.Wrapper):
         self.propositions = self.env.get_propositions()
         self.sampler = dfa_samplers.getDFASampler(dfa_sampler, self.propositions)
 
-        self.N = 300 # TODO compute this
+        # self.N = 300 # TODO compute this
+        Q = self.sampler.get_n_states()
+        F = self.sampler.get_n_accepting_states()
+        E = self.sampler.get_n_alphabet()
+        m = self.sampler.get_n_transitions()
+        b_Q = math.ceil(math.log(Q, 2))
+        b_E = math.ceil(math.log(E, 2))
+        self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q)
+        print(Q, F, E, b_Q, b_E, self.N)
+        # self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + Q*(b_E + 2*b_Q)
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})
@@ -41,6 +51,8 @@ class DFAEnv(gym.Wrapper):
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
         binary_seq = np.array([int(i) for i in binary_string])
+        print(self.N, binary_seq.shape[0], binary_seq, len(binary_string), binary_string)
+        input(">>")
         return np.pad(binary_seq, (self.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
     def reset(self):

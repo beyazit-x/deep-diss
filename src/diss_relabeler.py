@@ -29,7 +29,6 @@ class DissRelabeler():
         self.env = env
         self.propositions = env.get_propositions()
         self.replay_buffer = model.replay_buffer
-        self.N = 300 # TODO get this from dfa_wrapper
 
     def get_state_signature(self, state_id, dfa_dict):
         state = dfa_dict[state_id]
@@ -49,7 +48,7 @@ class DissRelabeler():
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
         binary_seq = np.array([int(i) for i in binary_string])
-        return np.pad(binary_seq, (self.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
+        return np.pad(binary_seq, (self.env.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
     def get_reward_and_done(self, dfa):
         start_state = dfa.start
