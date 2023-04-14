@@ -23,8 +23,7 @@ class DFAEnv(gym.Wrapper):
         m = self.sampler.get_n_transitions()
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
-        self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q)
-        print(Q, F, E, b_Q, b_E, self.N)
+        self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1
         # self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + Q*(b_E + 2*b_Q)
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
@@ -55,8 +54,6 @@ class DFAEnv(gym.Wrapper):
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
         binary_seq = np.array([int(i) for i in binary_string])
-        print(self.N, binary_seq.shape[0], binary_seq, len(binary_string), binary_string)
-        input(">>")
         return np.pad(binary_seq, (self.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
     def reset(self):
