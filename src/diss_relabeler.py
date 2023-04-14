@@ -111,6 +111,8 @@ class DissRelabeler():
                 synth_timeout=20,
             )
 
+            # sample as many DFAs as we can afford to without impacting the fps
+            # maybe 10 to 100?
             dfa_sample_size = 10
             energies = []
             dfas = []
@@ -160,7 +162,7 @@ class DissRelabeler():
             events = self.env.get_events_given_obss(features[end_of_episode_ind])
             events_clean = list(filter(lambda x: x != "", self.env.get_events_given_obss(features[end_of_episode_ind])))
 
-            chain_length = 5
+            chain_length = 4
 
             if len(events_clean) < chain_length:
                 continue

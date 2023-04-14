@@ -1,7 +1,10 @@
+import os
+import dill
 import asyncio
 import argparse
 from utils import make_env
 from stable_baselines3 import DQN
+from softDQN import SoftDQN
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_checker import check_env
 from feature_extractor import CustomCombinedExtractor
@@ -143,7 +146,14 @@ async def learn_with_diss(
 
     callback.on_training_end()
 
-    model.save(save_file_name)
+    MODEL_PATH = "logs/dqn_entropy"
+    file_index = 0
+    while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
+        file_index += 1
+    # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
+    #     dill.dump(model, dump_f)
+    model.save(f"{MODEL_PATH}_{file_index}.pkl", include=[])
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -177,7 +187,7 @@ if __name__ == "__main__":
 
 
     if args.relabeler == 'none':
-        model = DQN(
+        model = SoftDQN(
             "MultiInputPolicy",
             env,
             policy_kwargs=dict(
@@ -185,14 +195,14 @@ if __name__ == "__main__":
                 features_extractor_kwargs=dict(env=env),
                 ),
             verbose=1,
-            tensorboard_log="./distr_depth5_horizon20_tensorboard/no_relabel",
-            learning_starts=100000,
+            tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
+            learning_starts=50000,
             batch_size=10,
             gamma=gamma,
             )
-        model.learn(total_timesteps=5000000, callback=discounted_reward_callback)
+        model.learn(total_timesteps=2000000, callback=discounted_reward_callback)
     else:
-        model = DQN(
+        model = SoftDQN(
             "MultiInputPolicy",
             env,
             policy_kwargs=dict(
@@ -205,13 +215,13 @@ if __name__ == "__main__":
                 her_replay_buffer_size=1000000
                 ),
             verbose=1,
-            learning_starts=100000,
+            learning_starts=1000,
             batch_size=10,
             gamma=gamma,
-            tensorboard_log="./distr_depth5_horizon20_tensorboard/baseline_relabel_ratio0.1_new"
+            tensorboard_log="./distr_depth4_horizon20_tensorboard/temp"
             )
 
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=5000000))
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=1100))
 
 
 

@@ -36,6 +36,7 @@ class NNPolicyWrapper:
             return random_likelihood
 
     def policy_probability(self, feature, a):
+        # TODO double check the temperature here
         # softmax from the q values
         obs = self.feature2obs(feature)
         q_values = self.policy.policy.q_net(obs).detach().squeeze()
