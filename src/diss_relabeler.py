@@ -186,28 +186,27 @@ class DissRelabeler():
                     outputs={False, True},
                     label=lambda s: s == chain_length,
                     transition=transition)
-
+            dfa_binary_seq = self.get_binary_seq(dfa)
 
             for step_ind in range(end_of_step_ind + 1):
-                # TODO: There could be a bug here. Specifically, should we write the dfa after advancing it on the current char or before?
-                dfa = dfa.advance(events[step_ind]).minimize()
-                dfa_binary_seq = self.get_binary_seq(dfa)
+
                 dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
 
+                dfa = dfa.advance(events[step_ind]).minimize()
                 reward, done = self.get_reward_and_done(dfa)
+
                 dones[end_of_episode_ind][step_ind] = done
                 rewards[end_of_episode_ind][step_ind] = reward
 
-                if step_ind < end_of_step_ind:
-                    next_dfa = dfa.advance(events[step_ind + 1]).minimize()
-                    next_dfa_binary_seq = self.get_binary_seq(next_dfa)
-                    next_dfas[end_of_episode_ind][step_ind] = next_dfa_binary_seq
+                dfa_binary_seq = self.get_binary_seq(dfa)
+                next_dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
 
-                if done:
+                if done: # It is guaranteed that the done signal will be 1 within the episode.
                     features[end_of_episode_ind][step_ind + 1:] = np.zeros(features[end_of_episode_ind][step_ind + 1:].shape)
                     dfas[end_of_episode_ind][step_ind + 1:] = np.zeros(dfas[end_of_episode_ind][step_ind + 1:].shape)
                     actions[end_of_episode_ind][step_ind + 1:] = np.zeros(actions[end_of_episode_ind][step_ind + 1:].shape)
                     next_features[end_of_episode_ind][step_ind + 1:] = np.zeros(next_features[end_of_episode_ind][step_ind + 1:].shape)
+                    next_dfas[end_of_episode_ind][step_ind + 1:] = np.zeros(next_dfas[end_of_episode_ind][step_ind + 1:].shape)
                     dones[end_of_episode_ind][step_ind + 1:] = np.zeros(dones[end_of_episode_ind][step_ind + 1:].shape)
                     rewards[end_of_episode_ind][step_ind + 1:] = np.zeros(rewards[end_of_episode_ind][step_ind + 1:].shape)
                     break
