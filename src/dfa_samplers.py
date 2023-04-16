@@ -33,6 +33,9 @@ class DFASampler():
     def __init__(self, propositions):
         self.propositions = propositions
 
+    def get_concept_class(self):
+        raise NotImplemented
+
     def get_n_states(self):
         raise NotImplemented
 
@@ -265,6 +268,9 @@ class LetterworldChainSampler(DFASampler):
     def __init__(self, propositions):
         super().__init__(propositions)
         self.chain_length = 5
+
+    def get_concept_class(self):
+        return "LetterworldChainSampler", self.chain_length
 
     def get_n_states(self):
         return self.chain_length + 1

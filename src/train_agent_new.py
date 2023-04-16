@@ -58,10 +58,7 @@ class DiscountedRewardCallback(BaseCallback):
         return True
 
 async def relabel(relabeler, relabeler_name, batch_size):
-    if relabeler_name == "diss":
-        relabeler.relabel_diss(batch_size)
-    elif relabeler_name == "baseline":
-        relabeler.relabel_baseline(batch_size)
+    relabeler.relabel(relabeler_name, batch_size)
 
 async def learn(
     model: OffPolicyAlgorithm,
