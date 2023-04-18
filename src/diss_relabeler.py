@@ -70,6 +70,9 @@ class DissRelabeler():
 
         for init_dfa_int, end_of_episode_ind, end_of_step_ind in zip(relabeled_dfa_ints, end_of_episode_inds, end_of_step_inds):
 
+            if init_dfa_int is None:
+                continue
+
             events = self.env.get_events_given_obss(features[end_of_episode_ind])
 
             dfa_int = init_dfa_int
@@ -121,6 +124,10 @@ class DissRelabeler():
             events_clean = list(filter(lambda x: x != "", self.env.get_events_given_obss(features[end_of_episode_ind])))
 
             _, chain_length = self.env.sampler.get_concept_class()
+
+            if len(events_clean) < chain_length:
+                relabeled_dfa_ints.append(None)
+                continue
 
             probs = np.array([1 for i in range(1, len(events_clean)+1)])
             probs = probs / np.sum(probs) # This is not geometric distribution, it is uniform
