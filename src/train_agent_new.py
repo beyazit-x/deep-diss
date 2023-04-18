@@ -198,6 +198,26 @@ if __name__ == "__main__":
             gamma=gamma,
             )
         model.learn(total_timesteps=2000000, callback=discounted_reward_callback)
+    elif args.relabeler == "baseline":
+        model = SoftDQN(
+            "MultiInputPolicy",
+            env,
+            policy_kwargs=dict(
+                features_extractor_class=CustomCombinedExtractor,
+                features_extractor_kwargs=dict(env=env)
+                ),
+            replay_buffer_class=DissReplayBuffer,
+            replay_buffer_kwargs=dict(
+                max_episode_length=env.timeout,
+                her_replay_buffer_size=1000000
+                ),
+            verbose=1,
+            learning_starts=50000,
+            batch_size=10,
+            gamma=gamma,
+            tensorboard_log="./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01"
+            )
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=2000000))
     else:
         model = SoftDQN(
             "MultiInputPolicy",
@@ -212,13 +232,13 @@ if __name__ == "__main__":
                 her_replay_buffer_size=1000000
                 ),
             verbose=1,
-            learning_starts=1000,
+            learning_starts=50000,
             batch_size=10,
             gamma=gamma,
-            tensorboard_log="./distr_depth4_horizon20_tensorboard/temp"
+            tensorboard_log="./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01"
             )
 
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=1100))
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=2000000))
 
 
 

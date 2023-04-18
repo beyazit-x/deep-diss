@@ -39,16 +39,16 @@ class NNPolicyWrapper:
         # softmax from the q values
         obs = self.feature2obs(feature)
         q_values = self.policy.policy.q_net(obs).detach().squeeze()
-        exp_q_values = np.exp(q_values)
+        exp_q_values = torch.exp(q_values)
         likelihoods = exp_q_values / exp_q_values.sum()
-        return likelihoods[a]
+        return likelihoods[a].cpu()
 
     def transition_probability(self, feature, a, next_feature):
         return self.env.transition_probability(feature, a, next_feature)
 
     def feature2obs(self, feature):
         bin_seq = self.get_binary_seq(self.dfa_goal)
-        return {'features': torch.unsqueeze(torch.from_numpy(feature), dim=0), 'dfa': torch.unsqueeze(torch.from_numpy(bin_seq), dim=0)}
+        return {'features': torch.unsqueeze(torch.from_numpy(feature), dim=0).to(self.policy.device), 'dfa': torch.unsqueeze(torch.from_numpy(bin_seq), dim=0).to(self.policy.device)}
 
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]

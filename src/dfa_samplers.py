@@ -267,7 +267,7 @@ class UniversalSampler(DFASampler):
 class LetterworldChainSampler(DFASampler):
     def __init__(self, propositions):
         super().__init__(propositions)
-        self.chain_length = 5
+        self.chain_length = 4
 
     def get_concept_class(self):
         return "LetterworldChainSampler", self.chain_length

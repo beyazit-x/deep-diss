@@ -17,14 +17,17 @@ class DFAEnv(gym.Wrapper):
         self.sampler = dfa_samplers.getDFASampler(dfa_sampler, self.propositions)
 
         # self.N = 300 # TODO compute this
-        Q = self.sampler.get_n_states()
+        # Q = self.sampler.get_n_states()
         F = self.sampler.get_n_accepting_states()
         E = self.sampler.get_n_alphabet()
-        m = self.sampler.get_n_transitions()
+        # m = self.sampler.get_n_transitions()
+        self.num_states_upper = 6
+        Q = self.num_states_upper
+        m = Q * (Q-1) / 2
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
-        self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1
-        # self.N = 3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + Q*(b_E + 2*b_Q)
+        self.N = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
+        print(self.N)
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})

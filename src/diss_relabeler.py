@@ -8,7 +8,7 @@ from dfa import DFA
 from dfa.utils import dfa2dict
 from dfa.utils import dict2dfa
 
-from diss.experiment import PartialDFAIdentifier
+from concept_class import PartialDFAIdentifier
 from diss import LabeledExamples
 from diss import diss
 from diss.concept_classes import DFAConcept
@@ -29,6 +29,8 @@ class DissRelabeler():
         self.env = env
         self.propositions = env.get_propositions()
         self.replay_buffer = model.replay_buffer
+
+        self.num_states_upper = env.num_states_upper
 
     def relabel(self, relabeler_name, batch_size):
         if relabeler_name == "diss":
@@ -161,6 +163,7 @@ class DissRelabeler():
             partial = universal,
             base_examples = LabeledExamples(negative=[], positive=[]),
             try_reach_avoid=True, # TODO check this flag
+            upperbound=self.num_states_upper,
         )
 
         n = batch_size
