@@ -34,17 +34,35 @@ class NNPolicyWrapper:
         else:
             return random_likelihood
 
-    def policy_probability(self, feature, a):
+    def policy_probability(self, feature, a, batched=False):
+        # TODO double check the temperature here
+        if batched:
+            return self.policy_probability_batched(feature, a)
+        else:
+            # softmax from the q values
+            obs = self.feature2obs(feature)
+            q_values = self.policy.policy.q_net(obs).detach().squeeze()
+            exp_q_values = torch.exp(q_values)
+            likelihoods = exp_q_values / exp_q_values.sum()
+            return likelihoods[a].cpu()
+
+    def policy_probability_batched(self, features, actions):
         # TODO double check the temperature here
         # softmax from the q values
-        obs = self.feature2obs(feature)
-        q_values = self.policy.policy.q_net(obs).detach().squeeze()
+        obss = self.features2obss(features)
+        q_values = self.policy.policy.q_net(obss).detach().squeeze()
         exp_q_values = torch.exp(q_values)
-        likelihoods = exp_q_values / exp_q_values.sum()
-        return likelihoods[a].cpu()
+        likelihoods = torch.div(exp_q_values, exp_q_values.sum(dim=1).unsqueeze(1))
+        return [likelihood[a].cpu() for likelihood, a in zip(likelihoods, actions)] 
+
 
     def transition_probability(self, feature, a, next_feature):
         return self.env.transition_probability(feature, a, next_feature)
+
+    def features2obss(self, features):
+        bin_seq = self.get_binary_seq(self.dfa_goal)
+        batch_size = features.shape[0]
+        return {'features': torch.from_numpy(features).to(self.policy.device), 'dfa': torch.from_numpy(bin_seq).unsqueeze(0).repeat(batch_size,1).to(self.policy.device)}
 
     def feature2obs(self, feature):
         bin_seq = self.get_binary_seq(self.dfa_goal)
@@ -136,6 +154,9 @@ class NNMarkovChain(AnnotatedMarkovChain):
     def edge_probs(self) -> dict[Edge, float]:
         """Returns the probablity of edges in the demo prefix tree."""
         edge_probs = {}
+        ego_edge_query_edges = []
+        ego_edge_query_obs = []
+        ego_edge_query_acts = []
         for tree_edge in self.tree.tree.edges:
             v,w = tree_edge
             if self.tree.is_ego(v):
@@ -144,7 +165,10 @@ class NNMarkovChain(AnnotatedMarkovChain):
                 _, next_byte_act = self.tree.state(w) # this is (obs, next_act)
                 next_act = self.bytes2act(next_byte_act)
 
-                edge_probs[tree_edge] = self.policy.policy_probability(obs, next_act[0])
+                ego_edge_query_edges.append(tree_edge)
+                ego_edge_query_obs.append(obs)
+                ego_edge_query_acts.append(next_act[0])
+
             else:
                 prev_byte_obs, byte_act = self.tree.state(v) # this is (prev_obs, act)
                 prev_obs = self.bytes2obs(prev_byte_obs)
@@ -152,6 +176,11 @@ class NNMarkovChain(AnnotatedMarkovChain):
                 byte_obs = self.tree.state(w) # this is obs
                 obs = self.bytes2obs(byte_obs)
                 edge_probs[tree_edge] = self.policy.transition_probability(prev_obs, act[0], obs)
+
+        pol_probs = self.policy.policy_probability(np.array(ego_edge_query_obs), np.array(ego_edge_query_acts), batched=True)
+        
+        for tree_edge, pol_prob in zip(ego_edge_query_edges, pol_probs):
+            edge_probs[tree_edge] = pol_prob
 
         return edge_probs
 
@@ -167,10 +196,11 @@ class NNMarkovChain(AnnotatedMarkovChain):
            an ego winning path, but no ego winning paths exist that pass
            through the pivot.
         """
-        ATTEMPTS = 100
+        ATTEMPTS = 10
         for i in range(ATTEMPTS):
             path, prob, is_win = self._sample(pivot, win)
             if is_win == win:
+                # print(i)
                 return path, prob
 
 
