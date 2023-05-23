@@ -163,7 +163,7 @@ class PartialDFAIdentifier:
     partial: DFAConcept = attr.ib(converter=DFAConcept.from_dfa)
     base_examples: LabeledExamples = LabeledExamples()
     try_reach_avoid: bool = False
-    upperbound: int = None
+    encoding_upper: int = None
 
     def partial_dfa(self, inputs) -> DFA:
         assert inputs <= self.partial.dfa.inputs
@@ -223,10 +223,14 @@ class PartialDFAIdentifier:
             rejecting,
             alphabet=alphabet,
             order_by_stutter=order_by_stutter,
-            bounds=(None, self.upperbound),
+            # bounds=(None, self.upperbound),
         )
         if avoid:
             dfas = (minimize(lang & avoid_lang) for lang in dfas)
+
+        size_filter = lambda dfa : len(bin(dfa.to_int())[2:]) <= self.encoding_upper
+
+        dfas = filter(size_filter, dfas)
 
         return fn.take(N, dfas)
 

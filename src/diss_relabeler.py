@@ -30,7 +30,7 @@ class DissRelabeler():
         self.propositions = env.get_propositions()
         self.replay_buffer = model.replay_buffer
 
-        self.num_states_upper = env.num_states_upper
+        # self.num_states_upper = env.num_states_upper
 
     def relabel(self, relabeler_name, batch_size):
         if relabeler_name == "diss":
@@ -166,12 +166,6 @@ class DissRelabeler():
             transition=lambda s, c: True,
         )
 
-        identifer = PartialDFAIdentifier( # possible change this identifier? to decomposed?
-            partial = universal,
-            base_examples = LabeledExamples(negative=[], positive=[]),
-            try_reach_avoid=True, # TODO check this flag
-            upperbound=self.num_states_upper,
-        )
 
         n = batch_size
         samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
@@ -185,6 +179,13 @@ class DissRelabeler():
 
         relabeled_dfa_ints = []
         for feature, action in zip(features, actions):
+            events_clean = tuple(filter(lambda x: x != "", self.env.get_events_given_obss(feature)))
+            identifer = PartialDFAIdentifier( # possible change this identifier? to decomposed?
+                partial = universal,
+                base_examples = LabeledExamples(negative=[], positive=[events_clean]),
+                try_reach_avoid=True, # TODO check this flag
+                encoding_upper=self.env.N,
+            )
             dfa_search = diss(
                 demos=[planner.to_demo(feature, action)],
                 to_concept=identifer,
@@ -197,7 +198,7 @@ class DissRelabeler():
                 size_weight=1/50,
                 sgs_temp=1/4,
                 example_drop_prob=1e-2, #1e-2,
-                synth_timeout=20,
+                synth_timeout=4,
             )
 
             # sample as many DFAs as we can afford to without impacting the fps
