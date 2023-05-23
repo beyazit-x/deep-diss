@@ -21,6 +21,9 @@ from diss_replay_buffer import DissReplayBuffer
 
 from collections import deque
 
+import torch
+torch.set_num_threads(1)
+
 class DiscountedRewardCallback(BaseCallback):
     """
     Custom callback for plotting additional values in tensorboard.
@@ -192,9 +195,9 @@ if __name__ == "__main__":
                 features_extractor_kwargs=dict(env=env),
                 ),
             verbose=1,
-            tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
-            learning_starts=50000,
-            batch_size=10,
+            # tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
+            learning_starts=0000,
+            batch_size=8,
             gamma=gamma,
             )
         model.learn(total_timesteps=2000000, callback=discounted_reward_callback)
@@ -212,8 +215,8 @@ if __name__ == "__main__":
                 her_replay_buffer_size=1000000
                 ),
             verbose=1,
-            learning_starts=50000,
-            batch_size=10,
+            learning_starts=0000,
+            batch_size=8,
             gamma=gamma,
             tensorboard_log="./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01"
             )
@@ -233,7 +236,7 @@ if __name__ == "__main__":
                 ),
             verbose=1,
             learning_starts=50000,
-            batch_size=10,
+            batch_size=8,
             gamma=gamma,
             tensorboard_log="./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01"
             )

@@ -171,6 +171,7 @@ class DissRelabeler():
             base_examples = LabeledExamples(negative=[], positive=[]),
             try_reach_avoid=True, # TODO check this flag
             upperbound=self.num_states_upper,
+            max_dfas=1,
         )
 
         n = batch_size
@@ -197,7 +198,7 @@ class DissRelabeler():
                 size_weight=1/50,
                 sgs_temp=1/4,
                 example_drop_prob=1e-2, #1e-2,
-                synth_timeout=20,
+                synth_timeout=1,
             )
 
             # sample as many DFAs as we can afford to without impacting the fps

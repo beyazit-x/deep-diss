@@ -1,5 +1,5 @@
 from __future__ import annotations
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Optional, Sequence
 
 import attr
@@ -164,6 +164,7 @@ class PartialDFAIdentifier:
     base_examples: LabeledExamples = LabeledExamples()
     try_reach_avoid: bool = False
     upperbound: int = None
+    max_dfas: int = 20
 
     def partial_dfa(self, inputs) -> DFA:
         assert inputs <= self.partial.dfa.inputs
@@ -185,7 +186,7 @@ class PartialDFAIdentifier:
             data=data,
             filter_pred=self.is_subset,
             alphabet=self.partial.dfa.inputs,
-            find_dfas=self.find_dfas3,
+            find_dfas=partial(self.find_dfas3, N=self.max_dfas),
             order_by_stutter=True,
             temp=1,
             ref=reference
