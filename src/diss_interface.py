@@ -142,6 +142,7 @@ class NNMarkovChain(AnnotatedMarkovChain):
         self.act_shape = act_shape
         self.obs_type = obs_type
         self.act_type = act_type
+        self.edge_probs_val = None
 
 
     def bytes2obs(self, byte):
@@ -153,36 +154,39 @@ class NNMarkovChain(AnnotatedMarkovChain):
     @property
     def edge_probs(self) -> dict[Edge, float]:
         """Returns the probablity of edges in the demo prefix tree."""
-        edge_probs = {}
-        ego_edge_query_edges = []
-        ego_edge_query_obs = []
-        ego_edge_query_acts = []
-        for tree_edge in self.tree.tree.edges:
-            v,w = tree_edge
-            if self.tree.is_ego(v):
-                byte_obs = self.tree.state(v) # this is obs
-                obs = self.bytes2obs(byte_obs)
-                _, next_byte_act = self.tree.state(w) # this is (obs, next_act)
-                next_act = self.bytes2act(next_byte_act)
+        if self.edge_probs_val == None:
+            edge_probs = {}
+            ego_edge_query_edges = []
+            ego_edge_query_obs = []
+            ego_edge_query_acts = []
+            for tree_edge in self.tree.tree.edges:
+                v,w = tree_edge
+                if self.tree.is_ego(v):
+                    byte_obs = self.tree.state(v) # this is obs
+                    obs = self.bytes2obs(byte_obs)
+                    _, next_byte_act = self.tree.state(w) # this is (obs, next_act)
+                    next_act = self.bytes2act(next_byte_act)
 
-                ego_edge_query_edges.append(tree_edge)
-                ego_edge_query_obs.append(obs)
-                ego_edge_query_acts.append(next_act[0])
+                    ego_edge_query_edges.append(tree_edge)
+                    ego_edge_query_obs.append(obs)
+                    ego_edge_query_acts.append(next_act[0])
 
-            else:
-                prev_byte_obs, byte_act = self.tree.state(v) # this is (prev_obs, act)
-                prev_obs = self.bytes2obs(prev_byte_obs)
-                act = self.bytes2act(byte_act)
-                byte_obs = self.tree.state(w) # this is obs
-                obs = self.bytes2obs(byte_obs)
-                edge_probs[tree_edge] = self.policy.transition_probability(prev_obs, act[0], obs)
+                else:
+                    prev_byte_obs, byte_act = self.tree.state(v) # this is (prev_obs, act)
+                    prev_obs = self.bytes2obs(prev_byte_obs)
+                    act = self.bytes2act(byte_act)
+                    byte_obs = self.tree.state(w) # this is obs
+                    obs = self.bytes2obs(byte_obs)
+                    edge_probs[tree_edge] = self.policy.transition_probability(prev_obs, act[0], obs)
 
-        pol_probs = self.policy.policy_probability(np.array(ego_edge_query_obs), np.array(ego_edge_query_acts), batched=True)
-        
-        for tree_edge, pol_prob in zip(ego_edge_query_edges, pol_probs):
-            edge_probs[tree_edge] = pol_prob
+            pol_probs = self.policy.policy_probability(np.array(ego_edge_query_obs), np.array(ego_edge_query_acts), batched=True)
+            
+            for tree_edge, pol_prob in zip(ego_edge_query_edges, pol_probs):
+                edge_probs[tree_edge] = pol_prob
 
-        return edge_probs
+            self.edge_probs_val = edge_probs
+
+        return self.edge_probs_val
 
     def sample(self, pivot: Node, win: bool) -> SampledPath:
         """Sample a path conditioned on pivot and win.
