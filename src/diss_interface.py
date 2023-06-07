@@ -40,7 +40,7 @@ class NNPolicyWrapper:
             return self.policy_probability_batched(feature, a)
         else:
             # softmax from the q values
-            obs = self.feature2obs(feature)
+            obs = self.feature2obs(feature, detach=True)
             q_values = self.policy.policy.q_net(obs).detach().squeeze()
             exp_q_values = torch.exp(q_values)
             likelihoods = exp_q_values / exp_q_values.sum()
@@ -49,7 +49,7 @@ class NNPolicyWrapper:
     def policy_probability_batched(self, features, actions):
         # TODO double check the temperature here
         # softmax from the q values
-        obss = self.features2obss(features)
+        obss = self.features2obss(features, detach=True)
         q_values = self.policy.policy.q_net(obss).detach().squeeze()
         exp_q_values = torch.exp(q_values)
         likelihoods = torch.div(exp_q_values, exp_q_values.sum(dim=1).unsqueeze(1))
@@ -59,14 +59,20 @@ class NNPolicyWrapper:
     def transition_probability(self, feature, a, next_feature):
         return self.env.transition_probability(feature, a, next_feature)
 
-    def features2obss(self, features):
+    def features2obss(self, features, detach=True):
         bin_seq = self.get_binary_seq(self.dfa_goal)
         batch_size = features.shape[0]
-        return {'features': torch.from_numpy(features).to(self.policy.device), 'dfa': torch.from_numpy(bin_seq).unsqueeze(0).repeat(batch_size,1).to(self.policy.device)}
+        if detach:
+            return {'features': torch.from_numpy(features).detach().to(self.policy.device), 'dfa': torch.from_numpy(bin_seq).detach().unsqueeze(0).repeat(batch_size,1).to(self.policy.device)}
+        else:
+            return {'features': torch.from_numpy(features).to(self.policy.device), 'dfa': torch.from_numpy(bin_seq).unsqueeze(0).repeat(batch_size,1).to(self.policy.device)}
 
-    def feature2obs(self, feature):
+    def feature2obs(self, feature, detach=True):
         bin_seq = self.get_binary_seq(self.dfa_goal)
-        return {'features': torch.unsqueeze(torch.from_numpy(feature), dim=0).to(self.policy.device), 'dfa': torch.unsqueeze(torch.from_numpy(bin_seq), dim=0).to(self.policy.device)}
+        if detach:
+            return {'features': torch.unsqueeze(torch.from_numpy(feature).detach(), dim=0).to(self.policy.device), 'dfa': torch.unsqueeze(torch.from_numpy(bin_seq).detach(), dim=0).to(self.policy.device)}
+        else:
+            return {'features': torch.unsqueeze(torch.from_numpy(feature), dim=0).to(self.policy.device), 'dfa': torch.unsqueeze(torch.from_numpy(bin_seq), dim=0).to(self.policy.device)}
 
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
