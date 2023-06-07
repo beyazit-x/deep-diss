@@ -158,6 +158,9 @@ class DissRelabeler():
 
         planner = NNPlanner(self.env, self.model)
 
+        _, chain_length = self.env.sampler.get_concept_class()
+        target_num_states = chain_length+1
+
         universal = DFA(
             start=True,
             inputs=self.propositions,
@@ -185,6 +188,7 @@ class DissRelabeler():
                 try_reach_avoid=True, # TODO check this flag
                 encoding_upper=self.env.N,
                 max_dfas=1,
+                bounds=(target_num_states, target_num_states),
             )
             dfa_search = diss(
                 demos=[planner.to_demo(feature, action)],
@@ -192,7 +196,7 @@ class DissRelabeler():
                 to_chain=planner.plan,
                 competency=lambda *_: 10,
                 lift_path=planner.lift_path,
-                n_iters=100,
+                n_iters=100, # maximum number of iterations
                 reset_period=30,
                 surprise_weight=1,
                 size_weight=1/50,

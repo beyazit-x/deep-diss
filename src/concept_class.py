@@ -10,6 +10,7 @@ from dfa import DFA
 from dfa.utils import find_subset_counterexample, find_equiv_counterexample
 from dfa.utils import minimize
 from dfa_identify import find_dfa, find_dfas
+from dfa_identify.concept_class_restrictions import enforce_chain
 
 from diss import LabeledExamples, ConceptIdException
 from diss import DemoPrefixTree as PrefixTree
@@ -165,6 +166,7 @@ class PartialDFAIdentifier:
     try_reach_avoid: bool = False
     encoding_upper: int = None
     max_dfas: int = 20
+    bounds: tuple[int, int] = (None, None)
 
     def partial_dfa(self, inputs) -> DFA:
         assert inputs <= self.partial.dfa.inputs
@@ -224,7 +226,8 @@ class PartialDFAIdentifier:
             rejecting,
             alphabet=alphabet,
             order_by_stutter=order_by_stutter,
-            # bounds=(None, self.upperbound),
+            extra_clauses=enforce_chain,
+            bounds=self.bounds,
         )
         if avoid:
             dfas = (minimize(lang & avoid_lang) for lang in dfas)
@@ -233,7 +236,11 @@ class PartialDFAIdentifier:
 
         dfas = filter(size_filter, dfas)
 
+        # try:
         return fn.take(N, dfas)
+        # except Exception as e:
+            # print(f"Exception during concept identification: {e}")
+            # raise ConceptIdException
 
 
 def enumerative_search(
