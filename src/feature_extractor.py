@@ -33,7 +33,7 @@ from utils.parameters import TIMEOUT_SECONDS, FEATURE_SIZE
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict, env):
+    def __init__(self, observation_space: gym.spaces.Dict, env, gnn_load_path):
         # We do not know features-dim here before going over all the items,
         # so put something dummy for now. PyTorch requires calling
         # nn.Module.__init__ before adding modules
@@ -43,7 +43,10 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         self.propositions = env.get_propositions()
 
         self.text_embedding_size = 32
-        self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", max(FEATURE_SIZE, len(self.propositions) + 10), self.text_embedding_size)
+        if gnn_load_path is None:
+            self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", max(FEATURE_SIZE, len(self.propositions) + 10), self.text_embedding_size)
+        else:
+            self.gnn = torch.load(gnn_load_path)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

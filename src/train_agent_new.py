@@ -146,6 +146,7 @@ async def learn_with_diss(
 
     callback.on_training_end()
 
+    # should probably put this saving routine in a callback
     MODEL_PATH = "logs/dqn_entropy"
     file_index = 0
     while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
@@ -153,6 +154,8 @@ async def learn_with_diss(
     # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
     #     dill.dump(model, dump_f)
     model.save(f"{MODEL_PATH}_{file_index}.pkl", include=[])
+    if args.save_gnn_path is not None:
+        torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
 
 
 if __name__ == "__main__":
@@ -166,6 +169,10 @@ if __name__ == "__main__":
                         help="baseline | diss")
     parser.add_argument("--seed", type=int, default=1,
                             help="random seed (default: 1)")
+    parser.add_argument("--save-gnn-path", default=None,
+                            help="save the gnn model to a path after training")
+    parser.add_argument("--load-gnn-path", default=None,
+                            help="load a pretrained gnn model from a path")
 
     args = parser.parse_args()
 
@@ -185,6 +192,10 @@ if __name__ == "__main__":
 
     discounted_reward_callback = DiscountedRewardCallback(gamma)
 
+    if args.relabeler == "baseline":
+        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01"
+    else:
+        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01_chainclass"
 
     if args.relabeler == 'none':
         model = SoftDQN(
@@ -192,7 +203,7 @@ if __name__ == "__main__":
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env),
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path),
                 ),
             verbose=1,
             # tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
@@ -201,33 +212,13 @@ if __name__ == "__main__":
             gamma=gamma,
             )
         model.learn(total_timesteps=2000000, callback=discounted_reward_callback)
-    elif args.relabeler == "baseline":
-        model = SoftDQN(
-            "MultiInputPolicy",
-            env,
-            policy_kwargs=dict(
-                features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env)
-                ),
-            replay_buffer_class=DissReplayBuffer,
-            replay_buffer_kwargs=dict(
-                max_episode_length=env.timeout,
-                her_replay_buffer_size=1000000
-                ),
-            verbose=1,
-            learning_starts=0000,
-            batch_size=8,
-            gamma=gamma,
-            tensorboard_log="./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01"
-            )
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=2000000))
     else:
         model = SoftDQN(
             "MultiInputPolicy",
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env)
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path)
                 ),
             replay_buffer_class=DissReplayBuffer,
             replay_buffer_kwargs=dict(
@@ -238,10 +229,8 @@ if __name__ == "__main__":
             learning_starts=50000,
             batch_size=8,
             gamma=gamma,
-            tensorboard_log="./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01"
+            tensorboard_log=tensorboard_dir
             )
-
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=2000000))
-
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=500000))
 
 
