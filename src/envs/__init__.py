@@ -122,3 +122,7 @@ register(
     id='Gridworld-v3',
     entry_point='envs.gridworld.gridworld_env:GridworldEnv3')
 
+register(
+    id='DFADummy',
+    entry_point='envs.dfa_world.dfa_world:DFADummyEnv')
+
