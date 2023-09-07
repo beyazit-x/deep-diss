@@ -33,11 +33,11 @@ from utils.parameters import TIMEOUT_SECONDS, FEATURE_SIZE
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict, env, gnn_load_path):
+    def __init__(self, observation_space: gym.spaces.Dict, env, gnn_load_path, features_dim=1056):
         # We do not know features-dim here before going over all the items,
         # so put something dummy for now. PyTorch requires calling
         # nn.Module.__init__ before adding modules
-        super(CustomCombinedExtractor, self).__init__(observation_space, features_dim=1056)
+        super(CustomCombinedExtractor, self).__init__(observation_space, features_dim=features_dim)
 
         self.env = env
         self.propositions = env.get_propositions()

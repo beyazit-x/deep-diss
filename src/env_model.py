@@ -4,6 +4,7 @@ import torch.nn as nn
 from envs import *
 from gym.envs.classic_control import PendulumEnv
 from envs.gridworld.gridworld_env import GridworldEnv
+from envs.dfa_world.dfa_world import DummyEnv
 
 
 def getEnvModel(env, obs_space):
@@ -19,6 +20,8 @@ def getEnvModel(env, obs_space):
         return PendulumEnvModel(obs_space)
     if isinstance(env, GridworldEnv):
         return GridworldEnvModel(obs_space)
+    if isinstance(env, DummyEnv):
+        return DummyDFAEnvModel(obs_space)
     # Add your EnvModel here...
 
 
@@ -44,6 +47,17 @@ class EnvModel(nn.Module):
 
     def forward(self, obs):
         return None
+
+    def size(self):
+        return self.embedding_size
+
+class DummyDFAEnvModel(EnvModel):
+    def __init__(self, obs_space):
+        super().__init__(obs_space)
+        self.embedding_size = 0
+
+    def forward(self, obs):
+        return super().forward(obs)
 
     def size(self):
         return self.embedding_size

@@ -10,7 +10,7 @@ from dfa import DFA
 from dfa.utils import find_subset_counterexample, find_equiv_counterexample
 from dfa.utils import minimize
 from dfa_identify import find_dfa, find_dfas
-from dfa_identify.concept_class_restrictions import enforce_chain
+from dfa_identify.encoding import Bounds, ExtraClauseGenerator
 
 from diss import LabeledExamples, ConceptIdException
 from diss import DemoPrefixTree as PrefixTree
@@ -167,6 +167,7 @@ class PartialDFAIdentifier:
     encoding_upper: int = None
     max_dfas: int = 20
     bounds: tuple[int, int] = (None, None)
+    extra_clauses: ExtraClauseGenerator = None,
 
     def partial_dfa(self, inputs) -> DFA:
         assert inputs <= self.partial.dfa.inputs
@@ -221,12 +222,15 @@ class PartialDFAIdentifier:
             assert all(not (set(w) & avoid) for w in accepting)
             rejecting = {w for w in rejecting if not (set(w) & avoid)}
 
+        if self.extra_clauses == None:
+            extra_clauses = lambda *_: ()
+
         dfas = find_dfas(
             accepting,
             rejecting,
             alphabet=alphabet,
             order_by_stutter=order_by_stutter,
-            extra_clauses=enforce_chain,
+            extra_clauses=extra_clauses,
             bounds=self.bounds,
         )
         if avoid:

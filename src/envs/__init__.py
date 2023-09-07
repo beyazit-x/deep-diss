@@ -123,6 +123,6 @@ register(
     entry_point='envs.gridworld.gridworld_env:GridworldEnv3')
 
 register(
-    id='DFADummy',
+    id='DFADummy-v0',
     entry_point='envs.dfa_world.dfa_world:DFADummyEnv')
 

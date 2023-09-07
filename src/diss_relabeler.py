@@ -24,11 +24,12 @@ DISS_SOFTMAX_SAMPLE = not DISS_ARGMAX
 
 class DissRelabeler():
 
-    def __init__(self, model, env):
+    def __init__(self, model, env, extra_clauses=None):
         self.model = model
         self.env = env
         self.propositions = env.get_propositions()
         self.replay_buffer = model.replay_buffer
+        self.extra_clauses = extra_clauses
 
         # self.num_states_upper = env.num_states_upper
 
@@ -188,7 +189,9 @@ class DissRelabeler():
                 try_reach_avoid=True, # TODO check this flag
                 encoding_upper=self.env.N,
                 max_dfas=1,
-                bounds=(target_num_states, target_num_states),
+                bounds=(None,None),
+                # bounds=(target_num_states, target_num_states),
+                extra_clauses=self.extra_clauses,
             )
             dfa_search = diss(
                 demos=[planner.to_demo(feature, action)],

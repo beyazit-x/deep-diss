@@ -9,7 +9,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMoni
 from stable_baselines3.common.env_checker import check_env
 from feature_extractor import CustomCombinedExtractor
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, ProgressBarCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, ProgressBarCallback, CheckpointCallback
 
 from stable_baselines3.common.type_aliases import MaybeCallback
 
@@ -21,8 +21,42 @@ from diss_replay_buffer import DissReplayBuffer
 
 from collections import deque
 
+from dfa_identify.concept_class_restrictions import enforce_chain
+
 import torch
 torch.set_num_threads(1)
+
+FEATURE_DIM = 1056 # todo paramterize this
+
+class OverwriteCheckpointCallback(CheckpointCallback):
+    def __init__(
+        self,
+        save_freq,
+        save_path,
+        name_prefix="rl_model",
+        save_replay_buffer=False,
+        save_vecnormalize=False,
+        verbose=0,
+    ):
+        super(OverwriteCheckpointCallback, self).__init__(
+            save_freq,
+            save_path,
+            name_prefix,
+            save_replay_buffer,
+            save_vecnormalize,
+            verbose,
+	)
+    def _checkpoint_path(self, checkpoint_type="", extension=""):
+        """
+        Helper to get checkpoint path for each type of checkpoint.
+
+        :param checkpoint_type: empty for the model, "replay_buffer_"
+            or "vecnormalize_" for the other checkpoints.
+        :param extension: Checkpoint file extension (zip for model, pkl for others)
+        :return: Path to the checkpoint
+        """
+        return os.path.join(self.save_path, f"{self.name_prefix}_{checkpoint_type}_steps.{extension}")
+
 
 class DiscountedRewardCallback(BaseCallback):
     """
@@ -115,8 +149,9 @@ async def learn_with_diss(
     eval_log_path: Optional[str] = None,
     reset_num_timesteps: bool = True,
     progress_bar: bool = False,
+    extra_clauses = None,
 ):
-    relabeler = DissRelabeler(model, env)
+    relabeler = DissRelabeler(model, env, extra_clauses=extra_clauses)
 
     total_timesteps, callback = model._setup_learn(
         total_timesteps,
@@ -173,6 +208,8 @@ if __name__ == "__main__":
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
                             help="load a pretrained gnn model from a path")
+    parser.add_argument("--enforce-chains", action=argparse.BooleanOptionalAction, default=False,
+                            help="enforce diss to only find dfas in the chain class")
 
     args = parser.parse_args()
 
@@ -188,14 +225,23 @@ if __name__ == "__main__":
     # check_env(env)
     print("------------------------------------------------")
 
-    gamma = 1.0
+    gamma = .9
 
     discounted_reward_callback = DiscountedRewardCallback(gamma)
+    checkpoint_callback = OverwriteCheckpointCallback(
+        save_freq=10000,
+        save_path="./logs/",
+        name_prefix="full_model",
+        save_replay_buffer=True,
+        save_vecnormalize=True,
+    )
 
     if args.relabeler == "baseline":
-        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01"
+        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01_dummy-pretrained2"
+        # tensorboard_dir = "./pretrained_depth4"
+        # tensorboard_dir = "./dummy_env"
     else:
-        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01_chainclass"
+        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01_chainclass_pretrained"
 
     if args.relabeler == 'none':
         model = SoftDQN(
@@ -207,18 +253,22 @@ if __name__ == "__main__":
                 ),
             verbose=1,
             # tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
-            learning_starts=0000,
+            learning_starts=50000,
             batch_size=8,
             gamma=gamma,
             )
-        model.learn(total_timesteps=2000000, callback=discounted_reward_callback)
+        model.learn(total_timesteps=1000000, callback=[discounted_reward_callback, checkpoint_callback])
     else:
+        if args.enforce_chains:
+            extra_clauses = enforce_chains
+        else:
+            extra_clauses = None
         model = SoftDQN(
             "MultiInputPolicy",
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path)
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=FEATURE_DIM)
                 ),
             replay_buffer_class=DissReplayBuffer,
             replay_buffer_kwargs=dict(
@@ -231,6 +281,6 @@ if __name__ == "__main__":
             gamma=gamma,
             tensorboard_log=tensorboard_dir
             )
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=discounted_reward_callback, total_timesteps=500000))
+        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
 
 
