@@ -208,7 +208,7 @@ if __name__ == "__main__":
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
                             help="load a pretrained gnn model from a path")
-    parser.add_argument("--enforce-chains", action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument("--enforce-chain", action=argparse.BooleanOptionalAction, default=False,
                             help="enforce diss to only find dfas in the chain class")
 
     args = parser.parse_args()
@@ -259,8 +259,8 @@ if __name__ == "__main__":
             )
         model.learn(total_timesteps=1000000, callback=[discounted_reward_callback, checkpoint_callback])
     else:
-        if args.enforce_chains:
-            extra_clauses = enforce_chains
+        if args.enforce_chain:
+            extra_clauses = enforce_chain
         else:
             extra_clauses = None
         model = SoftDQN(

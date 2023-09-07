@@ -224,6 +224,8 @@ class PartialDFAIdentifier:
 
         if self.extra_clauses == None:
             extra_clauses = lambda *_: ()
+        else:
+            extra_clauses = self.extra_clauses
 
         dfas = find_dfas(
             accepting,
