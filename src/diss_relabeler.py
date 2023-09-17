@@ -216,9 +216,14 @@ class DissRelabeler():
             """ take a hyperparameter number of dfas from dfa_search and then,
                     1) sample from metadata['energy'], or
                     2) take argmax over energy """
-            for i, (data, concept, metadata) in zip(range(dfa_sample_size), dfa_search): 
-                dfas.append(concept.dfa)
-                energies.append(metadata['energy'])
+            try:
+                for i, (data, concept, metadata) in zip(range(dfa_sample_size), dfa_search): 
+                    dfas.append(concept.dfa)
+                    energies.append(metadata['energy'])
+            except TimeoutError:
+                print("Uncaught timeout error in DISS.")
+                if len(dfas) == 0:
+                    return
 
             # print("SAMPLING")
             if DISS_ARGMAX:
