@@ -134,7 +134,7 @@ async def learn(
 
     return False, model
 
-async def learn_with_diss(
+async def learn_with_diss_async(
     model: OffPolicyAlgorithm,
     env,
     relabeler_name,
@@ -192,6 +192,74 @@ async def learn_with_diss(
     if args.save_gnn_path is not None:
         torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
 
+def learn_with_diss(
+    model: OffPolicyAlgorithm,
+    env,
+    relabeler_name,
+    save_file_name,
+    total_timesteps: int,
+    callback: MaybeCallback = None,
+    log_interval: int = 4,
+    eval_env: Optional[GymEnv] = None,
+    eval_freq: int = -1,
+    n_eval_episodes: int = 5,
+    tb_log_name: str = "run",
+    eval_log_path: Optional[str] = None,
+    reset_num_timesteps: bool = True,
+    progress_bar: bool = False,
+    extra_clauses = None,
+):
+    relabeler = DissRelabeler(model, env, extra_clauses=extra_clauses)
+
+    total_timesteps, callback = model._setup_learn(
+        total_timesteps,
+        eval_env,
+        callback,
+        eval_freq,
+        n_eval_episodes,
+        eval_log_path,
+        reset_num_timesteps,
+        tb_log_name,
+        progress_bar,
+    )
+
+    callback.on_training_start(locals(), globals())
+
+    while model.num_timesteps < total_timesteps:
+        rollout = model.collect_rollouts(
+            model.env,
+            train_freq=model.train_freq,
+            action_noise=model.action_noise,
+            callback=callback,
+            learning_starts=model.learning_starts,
+            replay_buffer=model.replay_buffer,
+            log_interval=log_interval,
+        )
+
+        if rollout.continue_training is False:
+            break
+
+        if model.num_timesteps > 0:
+            # If no `gradient_steps` is specified,
+            # do as many gradients steps as steps performed during the rollout
+            gradient_steps = model.gradient_steps if model.gradient_steps >= 0 else rollout.episode_timesteps
+            # Special case when the user passes `gradient_steps=0`
+            if gradient_steps > 0:
+                model.train(batch_size=model.batch_size, gradient_steps=gradient_steps)
+                relabeler.relabel(relabeler_name, 2)
+
+    callback.on_training_end()
+
+    # should probably put this saving routine in a callback
+    MODEL_PATH = "logs/dqn_entropy"
+    file_index = 0
+    while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
+        file_index += 1
+    # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
+    #     dill.dump(model, dump_f)
+    model.save(f"{MODEL_PATH}_{file_index}.pkl", include=[])
+    if args.save_gnn_path is not None:
+        torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -210,6 +278,8 @@ if __name__ == "__main__":
                             help="load a pretrained gnn model from a path")
     parser.add_argument("--enforce-chain", action=argparse.BooleanOptionalAction, default=False,
                             help="enforce diss to only find dfas in the chain class")
+    parser.add_argument("--async-diss", action=argparse.BooleanOptionalAction, default=False,
+                            help="run diss with asyncio (default: False)")
 
     args = parser.parse_args()
 
@@ -281,6 +351,8 @@ if __name__ == "__main__":
             gamma=gamma,
             tensorboard_log=tensorboard_dir
             )
-        asyncio.run(learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
-
+        if args.async_diss:
+            asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
+        else:
+            learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses)
 
