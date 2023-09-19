@@ -170,10 +170,13 @@ async def learn_with_diss_async(
     while model.num_timesteps < total_timesteps:
 
         task1 = asyncio.create_task(learn(model, total_timesteps=10000000, callback=callback))
-        task2 = asyncio.create_task(relabel(relabeler, relabeler_name, 2))
+        task2 = None
+        if model.num_timesteps > model.learning_starts:
+            task2 = asyncio.create_task(relabel(relabeler, relabeler_name, 2))
 
         await task1
-        await task2
+        if task2 is not None:
+            await task2
 
         done, model = task1.result()
         if done:
@@ -239,7 +242,7 @@ def learn_with_diss(
         if rollout.continue_training is False:
             break
 
-        if model.num_timesteps > 0:
+        if model.num_timesteps > 0 and model.num_timesteps > model.learning_starts:
             # If no `gradient_steps` is specified,
             # do as many gradients steps as steps performed during the rollout
             gradient_steps = model.gradient_steps if model.gradient_steps >= 0 else rollout.episode_timesteps
@@ -280,6 +283,8 @@ if __name__ == "__main__":
                             help="enforce diss to only find dfas in the chain class")
     parser.add_argument("--async-diss", action=argparse.BooleanOptionalAction, default=False,
                             help="run diss with asyncio (default: False)")
+    parser.add_argument("--mid-check", action=argparse.BooleanOptionalAction, default=False,
+                            help="checkpointing during training (default: False)")
 
     args = parser.parse_args()
 
@@ -327,7 +332,10 @@ if __name__ == "__main__":
             batch_size=8,
             gamma=gamma,
             )
-        model.learn(total_timesteps=1000000, callback=[discounted_reward_callback, checkpoint_callback])
+        if arg.mid_check:
+            model.learn(total_timesteps=1000000, callback=[discounted_reward_callback, checkpoint_callback])
+        else:
+            model.learn(total_timesteps=1000000, callback=[discounted_reward_callback])
     else:
         if args.enforce_chain:
             extra_clauses = enforce_chain
@@ -352,7 +360,14 @@ if __name__ == "__main__":
             tensorboard_log=tensorboard_dir
             )
         if args.async_diss:
-            asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
+            if args.mid_check:
+                asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
+            else:
+
+                asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
         else:
-            learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses)
+            if args.mid_check:
+                learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses)
+            else:
+                learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback], total_timesteps=1000000, extra_clauses=extra_clauses)
 
