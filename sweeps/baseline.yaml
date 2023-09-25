@@ -1,0 +1,18 @@
+method: grid
+metric:
+  goal: maximize
+  name: reward
+parameters:
+  env:
+    value: Letter-7x7-v5 
+  sampler:
+    values: 
+      - LetterworldChain_4 
+      - LetterworldChain_5 
+      - LetterworldChain_6 
+      - LetterworldChain_7 
+  relabeler:
+    value: baseline
+  seed:
+    values: [0, 1, 2, 3, 4]
+program: src/train_agent_new.py

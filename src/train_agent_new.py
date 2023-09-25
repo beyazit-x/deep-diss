@@ -23,6 +23,9 @@ from collections import deque
 
 from dfa_identify.concept_class_restrictions import enforce_chain
 
+import wandb
+from wandb.integration.sb3 import WandbCallback
+
 import torch
 torch.set_num_threads(1)
 
@@ -275,6 +278,8 @@ if __name__ == "__main__":
                         help="baseline | diss")
     parser.add_argument("--seed", type=int, default=1,
                             help="random seed (default: 1)")
+    parser.add_argument("--gamma", type=float, default=0.9,
+                            help="discount factor (default: 0.9)")
     parser.add_argument("--save-gnn-path", default=None,
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
@@ -288,6 +293,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # setup wandb
+
+    run = wandb.init(
+	config=args,
+	sync_tensorboard=True,  # automatically upload SB3's tensorboard metrics to W&B
+        entity='nlauffer',
+	project="deep-diss",
+	monitor_gym=True,       # automatically upload gym environements' videos
+	save_code=False,
+    )
+
     env = make_env(args.env, args.sampler, seed=args.seed)
     # single_env = env
     # num_env = 8
@@ -300,9 +316,16 @@ if __name__ == "__main__":
     # check_env(env)
     print("------------------------------------------------")
 
-    gamma = .9
+    gamma = args.gamma
+
+    wandb_callback=WandbCallback(
+        gradient_save_freq=100,
+        model_save_path=f"models/{run.id}",
+        verbose=2,
+        )
 
     discounted_reward_callback = DiscountedRewardCallback(gamma)
+
     checkpoint_callback = OverwriteCheckpointCallback(
         save_freq=10000,
         save_path="./logs/",
@@ -311,12 +334,16 @@ if __name__ == "__main__":
         save_vecnormalize=True,
     )
 
+    callback_list = [discounted_reward_callback, wandb_callback]
+    if args.mid_check:
+        callback_list.append(checkpoint_callback)
+
     if args.relabeler == "baseline":
-        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01_dummy-pretrained2"
-        # tensorboard_dir = "./pretrained_depth4"
+        # tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01_dummy-pretrained2"
+        tensorboard_dir = "./wandb_sweep"
         # tensorboard_dir = "./dummy_env"
     else:
-        tensorboard_dir = "./distr_depth4_horizon20_tensorboard/diss_ratio0.1_entropy0.01_chainclass_pretrained"
+        tensorboard_dir = "./wandb_sweep_norelabel"
 
     if args.relabeler == 'none':
         model = SoftDQN(
@@ -326,16 +353,13 @@ if __name__ == "__main__":
                 features_extractor_class=CustomCombinedExtractor,
                 features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path),
                 ),
-            verbose=1,
+            verbose=0,
             # tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
             learning_starts=50000,
             batch_size=8,
             gamma=gamma,
             )
-        if arg.mid_check:
-            model.learn(total_timesteps=1000000, callback=[discounted_reward_callback, checkpoint_callback])
-        else:
-            model.learn(total_timesteps=1000000, callback=[discounted_reward_callback])
+        model.learn(total_timesteps=3000000, callback=callback_list)
     else:
         if args.enforce_chain:
             extra_clauses = enforce_chain
@@ -353,21 +377,16 @@ if __name__ == "__main__":
                 max_episode_length=env.timeout,
                 her_replay_buffer_size=1000000
                 ),
-            verbose=1,
+            verbose=0,
             learning_starts=50000,
             batch_size=8,
             gamma=gamma,
             tensorboard_log=tensorboard_dir
             )
         if args.async_diss:
-            if args.mid_check:
-                asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
-            else:
-
-                asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback], total_timesteps=1000000, extra_clauses=extra_clauses))
+            asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=3000000, extra_clauses=extra_clauses))
         else:
-            if args.mid_check:
-                learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback, checkpoint_callback], total_timesteps=1000000, extra_clauses=extra_clauses)
-            else:
-                learn_with_diss(model, env, args.relabeler, "dqn", callback=[discounted_reward_callback], total_timesteps=1000000, extra_clauses=extra_clauses)
+            learn_with_diss(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=3000000, extra_clauses=extra_clauses)
+
+    run.finish()
 

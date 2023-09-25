@@ -265,9 +265,9 @@ class UniversalSampler(DFASampler):
 
 
 class LetterworldChainSampler(DFASampler):
-    def __init__(self, propositions):
+    def __init__(self, propositions, length):
         super().__init__(propositions)
-        self.chain_length = 4
+        self.chain_length = int(length)
 
     def get_concept_class(self):
         return "LetterworldChainSampler", self.chain_length
@@ -657,7 +657,7 @@ def getDFASampler(sampler_id, propositions):
     elif (tokens[0] == "FixedLetterworldChain"):
         return FixedLetterworldChainSampler(propositions)
     elif (tokens[0] == "LetterworldChain"):
-        return LetterworldChainSampler(propositions)
+        return LetterworldChainSampler(propositions, tokens[1])
     else: # "Default"
         return DefaultSampler(propositions)
 
