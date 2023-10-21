@@ -18,9 +18,85 @@ from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 
 from diss_interface import NNPlanner
 
+import multiprocessing
+from softDQN import SoftDQN
+import pickle
 
 DISS_ARGMAX = False
 DISS_SOFTMAX_SAMPLE = not DISS_ARGMAX
+
+def get_diss_dfas(feature, action, propositions, extra_clauses, q):
+    try:
+        # sample as many DFAs as we can afford to without impacting the fps
+        # maybe 10 to 100?
+        dfa_sample_size = 10
+        dfas = []
+        energies = []
+        model = SoftDQN.load("data/model")
+        env = None
+        with open('env.pkl', 'rb') as f:
+            env = pickle.load(f)
+        if env is not None:
+            planner = NNPlanner(env, model)
+            events_clean = tuple(filter(lambda x: x != "", env.get_events_given_obss(feature)))
+            universal = DFA(
+                start=True,
+                inputs=propositions,
+                outputs={True, False},
+                label=lambda s: s,
+                transition=lambda s, c: True,
+            )
+            identifer = PartialDFAIdentifier( # possible change this identifier? to decomposed?
+                partial = universal,
+                base_examples = LabeledExamples(negative=[], positive=[events_clean]),
+                try_reach_avoid=True, # TODO check this flag
+                encoding_upper=env.N,
+                max_dfas=1,
+                bounds=(None,None),
+                # bounds=(target_num_states, target_num_states),
+                extra_clauses=extra_clauses,
+            )
+            dfa_search = diss(
+                demos=[planner.to_demo(feature, action)],
+                to_concept=identifer,
+                to_chain=planner.plan,
+                competency=lambda *_: 10,
+                lift_path=planner.lift_path,
+                n_iters=100, # maximum number of iterations
+                reset_period=30,
+                surprise_weight=1,
+                size_weight=1/50,
+                sgs_temp=1/4,
+                example_drop_prob=1e-2, #1e-2,
+                synth_timeout=1,
+            )
+            # """ take a hyperparameter number of dfas from dfa_search and then,
+            #         1) sample from metadata['energy'], or
+            #         2) take argmax over energy """
+            for i, (data, concept, metadata) in zip(range(dfa_sample_size), dfa_search):
+                dfas.append(concept.dfa)
+                energies.append(metadata['energy'])
+
+            # print("SAMPLING")
+            if DISS_ARGMAX:
+                idx_min = np.argmin(energies)
+                dfa_min = dfas[idx_min]
+                relabeled_dfa = dfa_min
+            elif DISS_SOFTMAX_SAMPLE:
+                # print(energies)
+                exp_energies = np.exp(energies) # TODO make this temperature tuneable
+                likelihood = exp_energies / exp_energies.sum()
+                # print(likelihood)
+                softmax_sampled_dfa = np.random.choice(dfas, p=likelihood)
+                # print("chose", dfas.index(softmax_sampled_dfa))
+                relabeled_dfa = softmax_sampled_dfa
+            # print('adding', relabeled_dfa)
+            relabeled_dfa_int = relabeled_dfa.to_int()
+            # print("relabeled_dfa_int = ", relabeled_dfa_int)
+            q.put(relabeled_dfa_int)
+            # relabeled_dfa_ints.append(relabeled_dfa_int)
+    except:
+        q.put(None)
 
 class DissRelabeler():
 
@@ -73,7 +149,7 @@ class DissRelabeler():
 
         for init_dfa_int, end_of_episode_ind, end_of_step_ind in zip(relabeled_dfa_ints, end_of_episode_inds, end_of_step_inds):
 
-            if init_dfa_int is None:
+            if init_dfa_int is None: # If subprocess returns None, then do not relabel, just the old dfa
                 continue
 
             events = self.env.get_events_given_obss(features[end_of_episode_ind])
@@ -82,12 +158,15 @@ class DissRelabeler():
             dfa = DFA.from_int(dfa_int, self.propositions)
             dfa_binary_seq = self.get_binary_seq(dfa)
 
-            for step_ind in range(end_of_step_ind + 1):
+            # for step_ind in range(end_of_step_ind + 1):
+            for step_ind in range(self.env.timeout + 1):
 
                 dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
 
                 dfa = dfa.advance(events[step_ind]).minimize()
                 reward, done = self.get_reward_and_done(dfa)
+
+                done = done or step_ind == self.env.timeout
 
                 dones[end_of_episode_ind][step_ind] = done
                 rewards[end_of_episode_ind][step_ind] = reward
@@ -157,18 +236,8 @@ class DissRelabeler():
 
     def relabel_diss(self, batch_size):
 
-        planner = NNPlanner(self.env, self.model)
-
         _, chain_length = self.env.sampler.get_concept_class()
         target_num_states = chain_length+1
-
-        universal = DFA(
-            start=True,
-            inputs=self.propositions,
-            outputs={True, False},
-            label=lambda s: s,
-            transition=lambda s, c: True,
-        )
 
         n = batch_size
         samples = self.replay_buffer.sample_traces(n, self.model._vec_normalize_env) # This should also return actions
@@ -180,67 +249,26 @@ class DissRelabeler():
         # shape of actions is (n, 76, 1)
         actions = samples.actions
 
+        queue = multiprocessing.Queue()
+        processes = []
         relabeled_dfa_ints = []
-        for feature, action in zip(features, actions):
-            events_clean = tuple(filter(lambda x: x != "", self.env.get_events_given_obss(feature)))
-            identifer = PartialDFAIdentifier( # possible change this identifier? to decomposed?
-                partial = universal,
-                base_examples = LabeledExamples(negative=[], positive=[events_clean]),
-                try_reach_avoid=True, # TODO check this flag
-                encoding_upper=self.env.N,
-                max_dfas=1,
-                bounds=(None,None),
-                # bounds=(target_num_states, target_num_states),
-                extra_clauses=self.extra_clauses,
-            )
-            dfa_search = diss(
-                demos=[planner.to_demo(feature, action)],
-                to_concept=identifer,
-                to_chain=planner.plan,
-                competency=lambda *_: 10,
-                lift_path=planner.lift_path,
-                n_iters=100, # maximum number of iterations
-                reset_period=30,
-                surprise_weight=1,
-                size_weight=1/50,
-                sgs_temp=1/4,
-                example_drop_prob=1e-2, #1e-2,
-                synth_timeout=1,
-            )
+        for feature, action, dfa in zip(features, actions, dfas):
 
-            # sample as many DFAs as we can afford to without impacting the fps
-            # maybe 10 to 100?
-            dfa_sample_size = 10
-            energies = []
-            dfas = []
-            """ take a hyperparameter number of dfas from dfa_search and then,
-                    1) sample from metadata['energy'], or
-                    2) take argmax over energy """
-            try:
-                for i, (data, concept, metadata) in zip(range(dfa_sample_size), dfa_search): 
-                    dfas.append(concept.dfa)
-                    energies.append(metadata['energy'])
-            except TimeoutError:
-                print("Uncaught timeout error in DISS.")
-                if len(dfas) == 0:
-                    return
+            self.model.save("data/model")
+            with open('env.pkl', 'wb') as f:
+                pickle.dump(self.env, f)
 
-            # print("SAMPLING")
-            if DISS_ARGMAX:
-                idx_min = np.argmin(energies)
-                dfa_min = dfas[idx_min]
-                relabeled_dfa = dfa_min
-            elif DISS_SOFTMAX_SAMPLE:
-                # print(energies)
-                exp_energies = np.exp(energies) # TODO make this temperature tuneable
-                likelihood = exp_energies / exp_energies.sum()
-                # print(likelihood)
-                softmax_sampled_dfa = np.random.choice(dfas, p=likelihood)
-                # print("chose", dfas.index(softmax_sampled_dfa))
-                relabeled_dfa = softmax_sampled_dfa
-            # print('adding', relabeled_dfa)
-            relabeled_dfa_int = relabeled_dfa.to_int()
+            p = multiprocessing.Process(target=get_diss_dfas, args=(feature, action, self.propositions, self.extra_clauses, queue))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
+        for p in processes:
+            relabeled_dfa_int = queue.get()
+            # print(relabeled_dfa_int)
             relabeled_dfa_ints.append(relabeled_dfa_int)
+
+        # print(batch_size, len(relabeled_dfa_ints))
 
         self.step_and_write_relabeled_dfas(relabeled_dfa_ints, samples)
         self.replay_buffer.relabel_traces(batch_size, samples)
