@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import os
 import dill
 import asyncio
@@ -270,6 +271,8 @@ def learn_with_diss(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--verbosity", type=int, default=1,
+                            help="verbosity level passed to stable baselines model")
     parser.add_argument("--env", required=True,
                             help="name of the environment to train on (REQUIRED)")
     parser.add_argument("--sampler", default="Default",
@@ -278,8 +281,20 @@ if __name__ == "__main__":
                         help="baseline | diss")
     parser.add_argument("--seed", type=int, default=1,
                             help="random seed (default: 1)")
-    parser.add_argument("--gamma", type=float, default=0.9,
-                            help="discount factor (default: 0.9)")
+    parser.add_argument("--gamma", type=float, default=0.99,
+                            help="discount factor (default: 0.99)")
+    parser.add_argument("--buffer-size", type=int, default=1000000,
+                            help="size of the regular (not HER) replay buffer (default: 1000000)")
+    parser.add_argument("--learning-starts", type=int, default=50000,
+                            help="how many samples to collect before doing gradient updates")
+    parser.add_argument("--total-timesteps", type=int, default=1000000,
+                            help="how many timesteps to train for")
+    parser.add_argument("--exploration-fraction", type=float, default=0.1,
+                            help="fraction of entire training period over which the exploration rate is reduced")
+    parser.add_argument("--batch-size", type=int, default=8,
+                            help="buffer size")
+    parser.add_argument("--reject-reward", type=int, default=0,
+                            help="how much reward should we give in non-accepting sink states? A form of reward shaping")
     parser.add_argument("--save-gnn-path", default=None,
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
@@ -304,7 +319,7 @@ if __name__ == "__main__":
 	save_code=False,
     )
 
-    env = make_env(args.env, args.sampler, seed=args.seed)
+    env = make_env(args.env, args.sampler, args.reject_reward, seed=args.seed)
     # single_env = env
     # num_env = 8
     # env = DummyVecEnv([lambda: make_env(args.env, args.sampler, seed=args.seed+i) for i in range(num_env)])
@@ -316,15 +331,14 @@ if __name__ == "__main__":
     # check_env(env)
     print("------------------------------------------------")
 
-    gamma = args.gamma
 
     wandb_callback=WandbCallback(
-        gradient_save_freq=100,
-        model_save_path=f"models/{run.id}",
+        gradient_save_freq=0,
+        # model_save_path=f"models/{run.id}",
         verbose=2,
         )
 
-    discounted_reward_callback = DiscountedRewardCallback(gamma)
+    discounted_reward_callback = DiscountedRewardCallback(args.gamma)
 
     checkpoint_callback = OverwriteCheckpointCallback(
         save_freq=10000,
@@ -353,13 +367,15 @@ if __name__ == "__main__":
                 features_extractor_class=CustomCombinedExtractor,
                 features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path),
                 ),
-            verbose=0,
-            # tensorboard_log="./distr_depth4_horizon20_tensorboard/no_relabel_entropy0.01",
-            learning_starts=50000,
-            batch_size=8,
-            gamma=gamma,
+            verbose=args.verbosity,
+            tensorboard_log=tensorboard_dir,
+            learning_starts=args.learning_starts,
+            batch_size=args.batch_size,
+            gamma=args.gamma,
+            buffer_size=args.buffer_size,
+            exploration_fraction=args.exploration_fraction
             )
-        model.learn(total_timesteps=3000000, callback=callback_list)
+        model.learn(total_timesteps=args.total_timesteps, callback=callback_list)
     else:
         if args.enforce_chain:
             extra_clauses = enforce_chain
@@ -375,18 +391,20 @@ if __name__ == "__main__":
             replay_buffer_class=DissReplayBuffer,
             replay_buffer_kwargs=dict(
                 max_episode_length=env.timeout,
-                her_replay_buffer_size=1000000
+                her_replay_buffer_size=args.buffer_size
                 ),
-            verbose=0,
-            learning_starts=50000,
-            batch_size=8,
-            gamma=gamma,
-            tensorboard_log=tensorboard_dir
+            verbose=args.verbosity,
+            learning_starts=args.learning_starts,
+            buffer_size=args.buffer_size,
+            batch_size=args.batch_size,
+            gamma=args.gamma,
+            tensorboard_log=tensorboard_dir,
+            exploration_fraction=args.exploration_fraction
             )
         if args.async_diss:
-            asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=3000000, extra_clauses=extra_clauses))
+            asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses))
         else:
-            learn_with_diss(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=3000000, extra_clauses=extra_clauses)
+            learn_with_diss(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses)
 
     run.finish()
 

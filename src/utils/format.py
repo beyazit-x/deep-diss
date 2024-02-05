@@ -14,7 +14,7 @@ import networkx as nx
 
 from utils.parameters import FEATURE_SIZE
 
-from envs import *
+from envs import MinigridEnv
 from envs.gridworld.gridworld_env import GridworldEnv
 from dfa_wrappers import DFAEnv
 

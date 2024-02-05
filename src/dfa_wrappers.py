@@ -4,28 +4,30 @@ from gym import spaces
 from copy import deepcopy
 import random
 import dfa_samplers
-from envs.safety.zones_env import zone
+# from envs.safety.zones_env import zone
 import networkx as nx
 import pickle
 from dfa import DFA
 import math
 
 class DFAEnv(gym.Wrapper):
-    def __init__(self, env, dfa_sampler=None):
+    def __init__(self, env, dfa_sampler=None, reject_reward=0):
         super().__init__(env)
         self.propositions = self.env.get_propositions()
         self.sampler = dfa_samplers.getDFASampler(dfa_sampler, self.propositions)
 
-        Q = self.sampler.get_n_states()
-        F = self.sampler.get_n_accepting_states()
-        E = self.sampler.get_n_alphabet()
-        m = self.sampler.get_n_transitions()
         # self.num_states_upper = 6
         # Q = self.num_states_upper
         # m = Q * (Q-1) / 2
         # F = self.num_states_upper - 1
+        Q = self.sampler.get_n_states()
+        F = self.sampler.get_n_accepting_states()
+        E = self.sampler.get_n_alphabet()
+        m = self.sampler.get_n_transitions()
+
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
+
         self.N = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
@@ -33,6 +35,8 @@ class DFAEnv(gym.Wrapper):
 
         self.dfa_goal_int = None
         self.dfa_goal_binary_seq = None
+
+        self.reject_reward = reject_reward
 
     @property
     def dfa_goal(self):
@@ -76,8 +80,8 @@ class DFAEnv(gym.Wrapper):
         if start_state_label == True: # If starting state of self.dfa_goal is accepting, then dfa_reward is 1.0.
             dfa_reward = 1.0
             dfa_done = True
-        elif len(states) == 1: # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a single state, then dfa_reward is -1.0.
-            dfa_reward = -1.0
+        elif len(states) == 1: # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a single state, then dfa_reward is reject_reward.
+            dfa_reward = self.reject_reward
             dfa_done = True
         else:
             dfa_reward = 0.0 # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a multiple states, then dfa_reward is 0.0.
@@ -94,8 +98,8 @@ class DFAEnv(gym.Wrapper):
         if start_state_label == True: # If starting state of self.dfa_goal is accepting, then dfa_reward is 1.0.
             dfa_reward = 1.0
             dfa_done = True
-        elif len(states) == 1: # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a single state, then dfa_reward is -1.0.
-            dfa_reward = -1.0
+        elif len(states) == 1: # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a single state, then dfa_reward is reject_reward.
+            dfa_reward = self.reject_reward
             dfa_done = True
         else:
             dfa_reward = 0.0 # If starting state of self.dfa_goal is rejecting and self.dfa_goal has a multiple states, then dfa_reward is 0.0.

@@ -3,10 +3,11 @@ from gym.envs.registration import register
 from envs.gym_letters.letter_env import LetterEnv
 from envs.gym_letters.simple_ltl_env import SimpleLTLEnv
 from envs.minigrid.minigrid_env import MinigridEnv
-from envs.safety.zones_env import ZonesEnv
+# from envs.safety.zones_env import ZonesEnv
 from envs.gridworld.gridworld_env import GridworldEnv
 
-__all__ = ["LetterEnv", "SimpleLTLEnv", "MinigridEnv", "ZonesEnv"]
+# __all__ = ["LetterEnv", "SimpleLTLEnv", "MinigridEnv", "ZonesEnv"]
+__all__ = ["LetterEnv", "SimpleLTLEnv", "MinigridEnv"]
 
 
 ### Simple LTL Envs
@@ -86,28 +87,28 @@ register(
     entry_point='envs.gym_letters.letter_env:LetterEnvAgentCentricFixedMapMid7x7'
 )
 
-### Minigrid Envs
-register(
-    id='Adversarial-v0',
-    entry_point='envs.minigrid.minigrid_env:AdversarialMinigridEnv'
-)
+# ### Minigrid Envs
+# register(
+#     id='Adversarial-v0',
+#     entry_point='envs.minigrid.minigrid_env:AdversarialMinigridEnv'
+# )
 
-### Safety Envs
-register(
-    id='Zones-1-v0',
-    entry_point='envs.safety.zones_env:ZonesEnv1')
+# ### Safety Envs
+# register(
+#     id='Zones-1-v0',
+#     entry_point='envs.safety.zones_env:ZonesEnv1')
 
-register(
-    id='Zones-1-v1',
-    entry_point='envs.safety.zones_env:ZonesEnv1Fixed')
+# register(
+#     id='Zones-1-v1',
+#     entry_point='envs.safety.zones_env:ZonesEnv1Fixed')
 
-register(
-    id='Zones-5-v0',
-    entry_point='envs.safety.zones_env:ZonesEnv5')
+# register(
+#     id='Zones-5-v0',
+#     entry_point='envs.safety.zones_env:ZonesEnv5')
 
-register(
-    id='Zones-5-v1',
-    entry_point='envs.safety.zones_env:ZonesEnv5Fixed')
+# register(
+#     id='Zones-5-v1',
+#     entry_point='envs.safety.zones_env:ZonesEnv5Fixed')
 
 ### Gridworld
 register(

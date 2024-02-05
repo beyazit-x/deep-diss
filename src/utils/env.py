@@ -9,8 +9,8 @@ import gym_minigrid
 import envs.gym_letters
 import dfa_wrappers
 
-def make_env(env_key, sampler, seed=None):
+def make_env(env_key, sampler, reject_reward=0, seed=None):
     env = gym.make(env_key)
     env.seed(seed)
-    return dfa_wrappers.DFAEnv(env, sampler)
+    return dfa_wrappers.DFAEnv(env, sampler, reject_reward)
     

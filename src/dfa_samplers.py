@@ -263,6 +263,51 @@ class UniversalSampler(DFASampler):
 
         return deepcopy(np.random.choice(self.enumerated_dfas, p=self.weights))
 
+class LetterworldChainSinkSampler(DFASampler):
+    def __init__(self, propositions, length, num_avoid):
+        super().__init__(propositions)
+        self.chain_length = int(length)
+        self.num_avoid = int(num_avoid)
+
+    def get_concept_class(self):
+        return "LetterworldChainSinkSampler", self.chain_length, self.num_avoid
+
+    def get_n_states(self):
+        return self.chain_length + 2
+
+    def get_n_accepting_states(self):
+        return 1
+
+    def get_n_alphabet(self):
+        return len(self.propositions) + 1 # +1 is for empty string
+
+    def get_n_transitions(self):
+        return self.chain_length + self.num_avoid * self.chain_length
+
+    def sample_dfa_formula(self):
+
+        prop_order = random.choices(self.propositions, k=self.chain_length)
+        prop_avoid = []
+        for prop in prop_order:
+            prop_avoid.append(random.sample([n for n in self.propositions if n != prop], self.num_avoid))
+
+        def transition(s, c):
+            if s < self.chain_length and c == prop_order[s]:
+                s = s + 1
+            elif s < self.chain_length and c in prop_avoid[s]:
+                s = self.chain_length + 1 # put in final state
+            return s
+
+        fixed_dfa = dfa.DFA(start=0,
+                            inputs=self.propositions,
+                            outputs={False, True},
+                            label=lambda s: s == self.chain_length,
+                            transition=transition)
+
+        # print(len(fixed_dfa.states())) # This returns 7 for chain length 5
+
+        return fixed_dfa
+
 
 class LetterworldChainSampler(DFASampler):
     def __init__(self, propositions, length):
@@ -279,7 +324,6 @@ class LetterworldChainSampler(DFASampler):
         return 1
 
     def get_n_alphabet(self):
-        print(self.propositions)
         return len(self.propositions) + 1 # +1 is for empty string
 
     def get_n_transitions(self):
@@ -658,6 +702,8 @@ def getDFASampler(sampler_id, propositions):
         return FixedLetterworldChainSampler(propositions)
     elif (tokens[0] == "LetterworldChain"):
         return LetterworldChainSampler(propositions, tokens[1])
+    elif (tokens[0] == "LetterworldChainSink"):
+        return LetterworldChainSinkSampler(propositions, tokens[1], tokens[2])
     else: # "Default"
         return DefaultSampler(propositions)
 
