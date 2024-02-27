@@ -277,8 +277,8 @@ if __name__ == "__main__":
                             help="name of the environment to train on (REQUIRED)")
     parser.add_argument("--sampler", default="Default",
                         help="the ltl formula template to sample from (default: DefaultSampler)")
-    parser.add_argument("--relabeler", default="diss",
-                        help="baseline | diss")
+    parser.add_argument("--relabeler", default="none",
+                        help="baseline | diss | none (default)")
     parser.add_argument("--seed", type=int, default=1,
                             help="random seed (default: 1)")
     parser.add_argument("--gamma", type=float, default=0.99,
@@ -352,12 +352,7 @@ if __name__ == "__main__":
     if args.mid_check:
         callback_list.append(checkpoint_callback)
 
-    if args.relabeler == "baseline":
-        # tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01_dummy-pretrained2"
-        tensorboard_dir = "./wandb_sweep"
-        # tensorboard_dir = "./dummy_env"
-    else:
-        tensorboard_dir = "./wandb_sweep_norelabel"
+    tensorboard_dir = "./wandb_sweep_relabel_" + args.relabeler
 
     if args.relabeler == 'none':
         model = SoftDQN(
