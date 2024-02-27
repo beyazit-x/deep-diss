@@ -30,7 +30,7 @@ from wandb.integration.sb3 import WandbCallback
 import torch
 torch.set_num_threads(1)
 
-FEATURE_DIM = 1056 # todo paramterize this
+FEATURE_DIM = 1056 # TODO: paramterize this
 
 class OverwriteCheckpointCallback(CheckpointCallback):
     def __init__(
@@ -354,13 +354,17 @@ if __name__ == "__main__":
 
     tensorboard_dir = "./wandb_sweep_relabel_" + args.relabeler
 
+    features_dim = FEATURE_DIM
+    if "Simple-DFA-Env" in args.env:
+        features_dim = 32
+
     if args.relabeler == 'none':
         model = SoftDQN(
             "MultiInputPolicy",
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path),
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=features_dim),
                 ),
             verbose=args.verbosity,
             tensorboard_log=tensorboard_dir,
@@ -381,7 +385,7 @@ if __name__ == "__main__":
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=FEATURE_DIM)
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=features_dim)
                 ),
             replay_buffer_class=DissReplayBuffer,
             replay_buffer_kwargs=dict(
