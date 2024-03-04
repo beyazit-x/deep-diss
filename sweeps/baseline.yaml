@@ -5,6 +5,10 @@ metric:
 parameters:
   env:
     value: Letter-7x7-v5 
+  total-timesteps:
+    value: 5000000
+  buffer-size:
+    value: 50000
   sampler:
     values: 
       - LetterworldChain_4 

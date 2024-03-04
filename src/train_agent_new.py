@@ -59,7 +59,7 @@ class OverwriteCheckpointCallback(CheckpointCallback):
         :param extension: Checkpoint file extension (zip for model, pkl for others)
         :return: Path to the checkpoint
         """
-        return os.path.join(self.save_path, f"{self.name_prefix}_{checkpoint_type}_steps.{extension}")
+        return os.path.join(self.save_path, f"{self.name_prefix}_{checkpoint_type}.{extension}")
 
 
 class DiscountedRewardCallback(BaseCallback):
@@ -189,7 +189,7 @@ async def learn_with_diss_async(
     callback.on_training_end()
 
     # should probably put this saving routine in a callback
-    MODEL_PATH = "logs/dqn_entropy"
+    MODEL_PATH = "model_checkpoints/gridworld"
     file_index = 0
     while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
         file_index += 1
@@ -283,9 +283,9 @@ if __name__ == "__main__":
                             help="random seed (default: 1)")
     parser.add_argument("--gamma", type=float, default=0.99,
                             help="discount factor (default: 0.99)")
-    parser.add_argument("--buffer-size", type=int, default=1000000,
-                            help="size of the regular (not HER) replay buffer (default: 1000000)")
-    parser.add_argument("--learning-starts", type=int, default=50000,
+    parser.add_argument("--buffer-size", type=int, default=50000,
+                            help="size of the regular (not HER) replay buffer (default: 50000)")
+    parser.add_argument("--learning-starts", type=int, default=10000,
                             help="how many samples to collect before doing gradient updates")
     parser.add_argument("--total-timesteps", type=int, default=1000000,
                             help="how many timesteps to train for")
@@ -340,15 +340,17 @@ if __name__ == "__main__":
 
     discounted_reward_callback = DiscountedRewardCallback(args.gamma)
 
-    checkpoint_callback = OverwriteCheckpointCallback(
-        save_freq=10000,
-        save_path="./logs/",
-        name_prefix="full_model",
-        save_replay_buffer=True,
-        save_vecnormalize=True,
+    checkpoint_callback = CheckpointCallback(
+        save_freq=25000,
+        save_path=wandb.run.dir,
+        name_prefix="checkpoint",
+        save_replay_buffer=False,
+        save_vecnormalize=False,
     )
 
-    callback_list = [discounted_reward_callback, wandb_callback]
+    wandb.save(os.path.join(wandb.run.dir, "checkpoint*"))
+
+    callback_list = [discounted_reward_callback, wandb_callback, checkpoint_callback]
     if args.mid_check:
         callback_list.append(checkpoint_callback)
 
@@ -365,7 +367,7 @@ if __name__ == "__main__":
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path),
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=FEATURE_DIM),
                 ),
             verbose=args.verbosity,
             tensorboard_log=tensorboard_dir,
@@ -376,6 +378,14 @@ if __name__ == "__main__":
             exploration_fraction=args.exploration_fraction
             )
         model.learn(total_timesteps=args.total_timesteps, callback=callback_list)
+        MODEL_PATH = "checkpoint_gridworld_list"
+        # file_index = 0
+        # while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
+        #     file_index += 1
+        # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
+        #     dill.dump(model, dump_f)
+        # model.save(f"{MODEL_PATH}.pkl", include=[])
+        model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
     else:
         if args.enforce_chain:
             extra_clauses = enforce_chain

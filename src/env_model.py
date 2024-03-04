@@ -14,8 +14,8 @@ def getEnvModel(env, obs_space):
         return LetterEnvModel(obs_space)
     if isinstance(env, MinigridEnv):
         return MinigridEnvModel(obs_space)
-    if isinstance(env, ZonesEnv):
-        return ZonesEnvModel(obs_space)
+    # if isinstance(env, ZonesEnv):
+    #     return ZonesEnvModel(obs_space)
     if isinstance(env, PendulumEnv):
         return PendulumEnvModel(obs_space)
     if isinstance(env, GridworldEnv):

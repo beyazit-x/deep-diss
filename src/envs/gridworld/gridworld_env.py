@@ -44,6 +44,7 @@ class GridworldEnv(gym.Env):
         self.state = start
         self.end_ep_prob = end_ep_prob
         self.props = list(set(overlay.values()))
+        self.props.remove('white')
         self.props.sort()
 
         # self.observation_space = gym.spaces.Tuple((gym.spaces.Discrete(dim), gym.spaces.Discrete(dim)))
@@ -87,7 +88,9 @@ class GridworldEnv(gym.Env):
 
     def get_events(self):
         loc = (self.state.x, self.state.y)
-        return self.gw.overlay.get(loc, 'white')
+        color = self.gw.overlay.get(loc, '')
+        if color == 'white': return []
+        return [color]
 
     def get_propositions(self):
         return self.props

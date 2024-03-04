@@ -262,6 +262,38 @@ class UniversalSampler(DFASampler):
         # return deepcopy(np.random.choice(self.enumerated_dfas_dict[random_size]))
 
         return deepcopy(np.random.choice(self.enumerated_dfas, p=self.weights))
+    
+
+class ListSampler(DFASampler):
+    def __init__(self, propositions, filename):
+        super().__init__(propositions)
+        self.dfa_ints = []
+        with open(filename, 'r') as f:
+            for line in f:
+                self.dfa_ints.append(int(line))
+
+        # self.enumerated_dfas = [dfa.DFA.from_int(dfa_int, inputs=propositions) for dfa_int in dfa_ints]
+        empty_dfa = dfa.DFA(start=False, label=lambda _: False, transition=lambda *_: False, inputs={'red', 'yellow','blue', 'green'})
+        empty_size = len(bin(empty_dfa.to_int()))
+        self.weights = [len(bin(d)) - empty_size for d in self.dfa_ints]
+
+    def sample_dfa_formula(self):
+        # random_size = np.random.choice(self.sizes, p=self.weights)
+        # return deepcopy(np.random.choice(self.enumerated_dfas_dict[random_size]))
+
+        return dfa.DFA.from_int(np.random.choice(self.dfa_ints), inputs=self.propositions)
+    
+    def get_n_states(self):
+        return 20
+
+    def get_n_accepting_states(self):
+        return 10
+
+    def get_n_alphabet(self):
+        return len(self.propositions)
+
+    def get_n_transitions(self):
+        return 50
 
 class LetterworldChainSinkSampler(DFASampler):
     def __init__(self, propositions, length, num_avoid):
@@ -694,6 +726,8 @@ def getDFASampler(sampler_id, propositions):
         return EventuallySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
     elif (tokens[0] == "Universal"):
         return UniversalSampler(propositions, tokens[1])
+    elif (tokens[0] == "List"):
+        return ListSampler(propositions, tokens[1])
     elif (tokens[0] == "FixedGridworld"):
         return FixedGridworldSampler(propositions)
     elif (tokens[0] == "FixedLetterworld"):
