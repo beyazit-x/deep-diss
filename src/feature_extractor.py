@@ -44,6 +44,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
 
         self.text_embedding_size = 32
         if gnn_load_path is None:
+            # TODO: Make GNN architecture a parameter
             self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", max(FEATURE_SIZE, len(self.propositions) + 10), self.text_embedding_size)
         else:
             self.gnn = torch.load(gnn_load_path)

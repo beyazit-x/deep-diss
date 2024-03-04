@@ -2,18 +2,24 @@ from gym.envs.registration import register
 
 from envs.gym_letters.letter_env import LetterEnv
 from envs.gym_letters.simple_ltl_env import SimpleLTLEnv
+from envs.gym_letters.simple_dfa_env import SimpleDFAEnv
 from envs.minigrid.minigrid_env import MinigridEnv
-# from envs.safety.zones_env import ZonesEnv
+from envs.safety.zones_env import ZonesEnv
 from envs.gridworld.gridworld_env import GridworldEnv
 
-# __all__ = ["LetterEnv", "SimpleLTLEnv", "MinigridEnv", "ZonesEnv"]
-__all__ = ["LetterEnv", "SimpleLTLEnv", "MinigridEnv"]
+__all__ = ["LetterEnv", "SimpleLTLEnv", "SimpleDFAEnv", "MinigridEnv", "ZonesEnv"]
+# __all__ = ["LetterEnv", "SimpleLTLEnv", "MinigridEnv"]
 
 
 ### Simple LTL Envs
 register(
     id='Simple-LTL-Env-v0',
     entry_point='envs.gym_letters.simple_ltl_env:SimpleLTLEnvDefault'
+)
+
+register(
+    id='Simple-DFA-Env-v0',
+    entry_point='envs.gym_letters.simple_dfa_env:SimpleDFAEnvDefault'
 )
 
 ### Letter Envs

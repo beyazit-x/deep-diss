@@ -30,7 +30,7 @@ from wandb.integration.sb3 import WandbCallback
 import torch
 torch.set_num_threads(1)
 
-FEATURE_DIM = 1056 # todo paramterize this
+FEATURE_DIM = 1056 # TODO: paramterize this
 
 class OverwriteCheckpointCallback(CheckpointCallback):
     def __init__(
@@ -277,8 +277,8 @@ if __name__ == "__main__":
                             help="name of the environment to train on (REQUIRED)")
     parser.add_argument("--sampler", default="Default",
                         help="the ltl formula template to sample from (default: DefaultSampler)")
-    parser.add_argument("--relabeler", default="diss",
-                        help="baseline | diss")
+    parser.add_argument("--relabeler", default="none",
+                        help="baseline | diss | none (default)")
     parser.add_argument("--seed", type=int, default=1,
                             help="random seed (default: 1)")
     parser.add_argument("--gamma", type=float, default=0.99,
@@ -354,12 +354,11 @@ if __name__ == "__main__":
     if args.mid_check:
         callback_list.append(checkpoint_callback)
 
-    if args.relabeler == "baseline":
-        # tensorboard_dir = "./distr_depth4_horizon20_tensorboard/baseline_relabel_ratio0.1_entropy0.01_dummy-pretrained2"
-        tensorboard_dir = "./wandb_sweep"
-        # tensorboard_dir = "./dummy_env"
-    else:
-        tensorboard_dir = "./wandb_sweep_norelabel"
+    tensorboard_dir = "./wandb_sweep_relabel_" + args.relabeler
+
+    features_dim = FEATURE_DIM
+    if "Simple-DFA-Env" in args.env:
+        features_dim = 32
 
     if args.relabeler == 'none':
         model = SoftDQN(
@@ -367,7 +366,7 @@ if __name__ == "__main__":
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=FEATURE_DIM),
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=features_dim),
                 ),
             verbose=args.verbosity,
             tensorboard_log=tensorboard_dir,
@@ -396,7 +395,7 @@ if __name__ == "__main__":
             env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
-                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=FEATURE_DIM)
+                features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=features_dim)
                 ),
             replay_buffer_class=DissReplayBuffer,
             replay_buffer_kwargs=dict(
