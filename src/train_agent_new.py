@@ -22,7 +22,7 @@ from diss_replay_buffer import DissReplayBuffer
 
 from collections import deque
 
-from dfa_identify.concept_class_restrictions import enforce_chain
+from dfa_identify.concept_class_restrictions import enforce_chain, enforce_reach_avoid_seq
 
 import wandb
 from wandb.integration.sb3 import WandbCallback
@@ -299,8 +299,8 @@ if __name__ == "__main__":
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
                             help="load a pretrained gnn model from a path")
-    parser.add_argument("--enforce-chain", action=argparse.BooleanOptionalAction, default=False,
-                            help="enforce diss to only find dfas in the chain class")
+    parser.add_argument("--enforce-clause", default=None,
+                            help="enforce diss to only find dfas in a specific class")
     parser.add_argument("--async-diss", action=argparse.BooleanOptionalAction, default=False,
                             help="run diss with asyncio (default: False)")
     parser.add_argument("--mid-check", action=argparse.BooleanOptionalAction, default=False,
@@ -386,8 +386,10 @@ if __name__ == "__main__":
         # model.save(f"{MODEL_PATH}.pkl", include=[])
         model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
     else:
-        if args.enforce_chain:
+        if args.enforce_clause == "chain":
             extra_clauses = enforce_chain
+        elif args.enforce_clause == "reach_avoid":
+            extra_clauses = enforce_reach_avoid_seq
         else:
             extra_clauses = None
         model = SoftDQN(
