@@ -19,6 +19,7 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Rollout
 
 from diss_relabeler import DissRelabeler
 from diss_replay_buffer import DissReplayBuffer
+from env_model import getEnvModel
 
 from collections import deque
 
@@ -27,10 +28,10 @@ from dfa_identify.concept_class_restrictions import enforce_chain, enforce_reach
 import wandb
 from wandb.integration.sb3 import WandbCallback
 
+from utils.parameters import GNN_EMBEDDING_SIZE
+
 import torch
 torch.set_num_threads(1)
-
-FEATURE_DIM = 1056 # TODO: paramterize this
 
 class OverwriteCheckpointCallback(CheckpointCallback):
     def __init__(
@@ -358,9 +359,9 @@ if __name__ == "__main__":
 
     tensorboard_dir = "./wandb_sweep_relabel_" + args.relabeler
 
-    features_dim = FEATURE_DIM
-    if "Simple-DFA-Env" in args.env:
-        features_dim = 32
+    obs_space = {"image": env.observation_space['features'].shape, "text": env.observation_space['dfa'].n}
+    env_model = getEnvModel(env, obs_space)
+    features_dim = env_model.embedding_size + GNN_EMBEDDING_SIZE
 
     policy = None
     if args.policy == "SDQN":
