@@ -314,7 +314,8 @@ class LetterworldChainSinkSampler(DFASampler):
         return len(self.propositions) + 1 # +1 is for empty string
 
     def get_n_transitions(self):
-        return self.chain_length + self.num_avoid * self.chain_length
+        return self.chain_length + self.num_avoid * (self.chain_length + 1)
+    
 
     def sample_dfa_formula(self):
 

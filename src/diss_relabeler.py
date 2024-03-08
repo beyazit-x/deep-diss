@@ -315,8 +315,6 @@ class DissRelabeler():
 
     def relabel_diss(self, batch_size):
 
-        _ = self.env.sampler.get_concept_class()
-        # target_num_states = chain_length+1
         target_num_states = self.env.sampler.get_n_states()
 
         n = batch_size
