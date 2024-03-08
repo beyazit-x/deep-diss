@@ -4,7 +4,7 @@ import dill
 import asyncio
 import argparse
 from utils import make_env
-from stable_baselines3 import DQN
+from stable_baselines3 import DQN, SAC
 from softDQN import SoftDQN
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_checker import check_env
@@ -289,8 +289,8 @@ if __name__ == "__main__":
                             help="how many samples to collect before doing gradient updates")
     parser.add_argument("--total-timesteps", type=int, default=1000000,
                             help="how many timesteps to train for")
-    parser.add_argument("--exploration-fraction", type=float, default=0.1,
-                            help="fraction of entire training period over which the exploration rate is reduced")
+    # parser.add_argument("--exploration-fraction", type=float, default=0.1,
+    #                         help="fraction of entire training period over which the exploration rate is reduced")
     parser.add_argument("--batch-size", type=int, default=8,
                             help="buffer size")
     parser.add_argument("--reject-reward", type=int, default=0,
@@ -305,6 +305,8 @@ if __name__ == "__main__":
                             help="run diss with asyncio (default: False)")
     parser.add_argument("--mid-check", action=argparse.BooleanOptionalAction, default=False,
                             help="checkpointing during training (default: False)")
+    parser.add_argument("--policy", default="SDQN",
+                            help="SAC | SDQN (default)")
 
     args = parser.parse_args()
 
@@ -358,10 +360,20 @@ if __name__ == "__main__":
     if "Simple-DFA-Env" in args.env:
         features_dim = 32
 
+    policy = None
+    if args.policy == "SDQN":
+        policy = SoftDQN
+    elif args.policy == "SAC":
+        policy = SAC
+    else:
+        raise ValueError("Policy can only be SDQN or SAC")
+    assert policy is not None
+
     if args.relabeler == 'none':
-        model = SoftDQN(
-            "MultiInputPolicy",
-            env,
+        model = policy(
+            ent_coef=0.01,
+            policy="MultiInputPolicy",
+            env=env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
                 features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=features_dim),
@@ -372,7 +384,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             gamma=args.gamma,
             buffer_size=args.buffer_size,
-            exploration_fraction=args.exploration_fraction
+            # exploration_fraction=args.exploration_fraction
             )
         model.learn(total_timesteps=args.total_timesteps, callback=callback_list)
     else:
@@ -380,9 +392,10 @@ if __name__ == "__main__":
             extra_clauses = enforce_chain
         else:
             extra_clauses = None
-        model = SoftDQN(
-            "MultiInputPolicy",
-            env,
+        model = policy(
+            ent_coef=0.01,
+            policy="MultiInputPolicy",
+            env=env,
             policy_kwargs=dict(
                 features_extractor_class=CustomCombinedExtractor,
                 features_extractor_kwargs=dict(env=env, gnn_load_path=args.load_gnn_path, features_dim=features_dim)
@@ -398,7 +411,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             gamma=args.gamma,
             tensorboard_log=tensorboard_dir,
-            exploration_fraction=args.exploration_fraction
+            # exploration_fraction=args.exploration_fraction
             )
         if args.async_diss:
             asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses))

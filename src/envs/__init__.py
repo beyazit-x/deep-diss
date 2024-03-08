@@ -99,22 +99,22 @@ register(
 #     entry_point='envs.minigrid.minigrid_env:AdversarialMinigridEnv'
 # )
 
-# ### Safety Envs
-# register(
-#     id='Zones-1-v0',
-#     entry_point='envs.safety.zones_env:ZonesEnv1')
+### Safety Envs
+register(
+    id='Zones-1-v0',
+    entry_point='envs.safety.zones_env:ZonesEnv1')
 
-# register(
-#     id='Zones-1-v1',
-#     entry_point='envs.safety.zones_env:ZonesEnv1Fixed')
+register(
+    id='Zones-1-v1',
+    entry_point='envs.safety.zones_env:ZonesEnv1Fixed')
 
-# register(
-#     id='Zones-5-v0',
-#     entry_point='envs.safety.zones_env:ZonesEnv5')
+register(
+    id='Zones-5-v0',
+    entry_point='envs.safety.zones_env:ZonesEnv5')
 
-# register(
-#     id='Zones-5-v1',
-#     entry_point='envs.safety.zones_env:ZonesEnv5Fixed')
+register(
+    id='Zones-5-v1',
+    entry_point='envs.safety.zones_env:ZonesEnv5Fixed')
 
 ### Gridworld
 register(
