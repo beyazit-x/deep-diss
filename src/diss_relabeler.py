@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import torch as th
 import random
+import warnings
 
 from dfa import DFA
 from dfa.utils import dfa2dict
@@ -122,6 +123,9 @@ class DissRelabeler():
     def get_binary_seq(self, dfa):
         binary_string = bin(dfa.to_int())[2:]
         binary_seq = np.array([int(i) for i in binary_string])
+        if self.env.N < binary_seq.shape[0]:
+            warnings.warn(f"Description size of the relabeled DFA is more that the upper bound. DFA: {dfa}; description size of the DFA: {binary_seq.shape[0]}, description size upper bound: {self.env.N}")
+            return None
         return np.pad(binary_seq, (self.env.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
     def get_reward_and_done(self, dfa):
@@ -152,6 +156,7 @@ class DissRelabeler():
         for init_dfa_int, end_of_episode_ind, end_of_step_ind in zip(relabeled_dfa_ints, end_of_episode_inds, end_of_step_inds):
 
             if init_dfa_int is None: # If subprocess returns None, then do not relabel, just the old dfa
+                warnings.warn("DISS subprocess failed!")
                 continue
 
             events = self.env.get_events_given_obss(features[end_of_episode_ind])
@@ -159,6 +164,8 @@ class DissRelabeler():
             dfa_int = init_dfa_int
             dfa = DFA.from_int(dfa_int, self.propositions)
             dfa_binary_seq = self.get_binary_seq(dfa)
+            if dfa_binary_seq is None:
+                continue
 
             # for step_ind in range(end_of_step_ind + 1):
             for step_ind in range(self.env.timeout + 1):
