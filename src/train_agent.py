@@ -189,17 +189,6 @@ async def learn_with_diss_async(
 
     callback.on_training_end()
 
-    # should probably put this saving routine in a callback
-    MODEL_PATH = "model_checkpoints/gridworld"
-    file_index = 0
-    while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
-        file_index += 1
-    # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
-    #     dill.dump(model, dump_f)
-    model.save(f"{MODEL_PATH}_{file_index}.pkl", include=[])
-    if args.save_gnn_path is not None:
-        torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
-
 def learn_with_diss(
     model: OffPolicyAlgorithm,
     env,
@@ -257,17 +246,6 @@ def learn_with_diss(
                 relabeler.relabel(relabeler_name, 2)
 
     callback.on_training_end()
-
-    # should probably put this saving routine in a callback
-    MODEL_PATH = "logs/dqn_entropy"
-    file_index = 0
-    while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
-        file_index += 1
-    # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
-    #     dill.dump(model, dump_f)
-    model.save(f"{MODEL_PATH}_{file_index}.pkl", include=[])
-    if args.save_gnn_path is not None:
-        torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -390,14 +368,6 @@ if __name__ == "__main__":
             exploration_fraction=args.exploration_fraction
             )
         model.learn(total_timesteps=args.total_timesteps, callback=callback_list)
-        MODEL_PATH = "checkpoint_gridworld_list"
-        # file_index = 0
-        # while os.path.exists(f"{MODEL_PATH}_{file_index}.pkl"):
-        #     file_index += 1
-        # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
-        #     dill.dump(model, dump_f)
-        # model.save(f"{MODEL_PATH}.pkl", include=[])
-        model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
     else:
         if args.enforce_clause == "chain":
             extra_clauses = enforce_chain
@@ -430,6 +400,12 @@ if __name__ == "__main__":
             asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses))
         else:
             learn_with_diss(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses)
+
+    MODEL_PATH = "checkpoint_final"
+    model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
+    if args.save_gnn_path is not None:
+        torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
+
 
     run.finish()
 

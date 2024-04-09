@@ -50,10 +50,10 @@ class DFASampler():
     #     raise NotImplemented
 
     def get_size_bound(self):
-        Q = self.sampler.get_n_states()
-        F = self.sampler.get_n_accepting_states()
-        E = self.sampler.get_n_alphabet()
-        m = self.sampler.get_n_transitions()
+        Q = self.get_n_states()
+        F = self.get_n_accepting_states()
+        E = self.get_n_alphabet()
+        m = self.get_n_transitions()
 
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
