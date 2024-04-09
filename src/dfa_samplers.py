@@ -6,6 +6,7 @@ given template(s).
                 formula at random.
 """
 
+import math
 import ring
 import time
 import pydot
@@ -36,17 +37,28 @@ class DFASampler():
     def get_concept_class(self):
         raise NotImplemented
 
-    def get_n_states(self):
-        raise NotImplemented
+    # def get_n_states(self):
+    #     raise NotImplemented
 
-    def get_n_accepting_states(self):
-        raise NotImplemented
+    # def get_n_accepting_states(self):
+    #     raise NotImplemented
 
-    def get_n_alphabet(self):
-        raise NotImplemented
+    # def get_n_alphabet(self):
+    #     raise NotImplemented
 
-    def get_n_transitions(self):
-        raise NotImplemented
+    # def get_n_transitions(self):
+    #     raise NotImplemented
+
+    def get_size_bound(self):
+        Q = self.sampler.get_n_states()
+        F = self.sampler.get_n_accepting_states()
+        E = self.sampler.get_n_alphabet()
+        m = self.sampler.get_n_transitions()
+
+        b_Q = math.ceil(math.log(Q, 2))
+        b_E = math.ceil(math.log(E, 2))
+
+        return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
 
     def sample_dfa_formula(self):
         raise NotImplemented
@@ -275,6 +287,7 @@ class ListSampler(DFASampler):
         # self.enumerated_dfas = [dfa.DFA.from_int(dfa_int, inputs=propositions) for dfa_int in dfa_ints]
         empty_dfa = dfa.DFA(start=False, label=lambda _: False, transition=lambda *_: False, inputs={'red', 'yellow','blue', 'green'})
         empty_size = len(bin(empty_dfa.to_int()))
+        self.max_size = max([len(bin(d)) for d in self.dfa_ints])
         self.weights = [len(bin(d)) - empty_size for d in self.dfa_ints]
 
     def sample_dfa_formula(self):
@@ -283,17 +296,8 @@ class ListSampler(DFASampler):
 
         return dfa.DFA.from_int(np.random.choice(self.dfa_ints), inputs=self.propositions)
     
-    def get_n_states(self):
-        return 20
-
-    def get_n_accepting_states(self):
-        return 10
-
-    def get_n_alphabet(self):
-        return len(self.propositions)
-
-    def get_n_transitions(self):
-        return 50
+    def get_size_bound(self):
+        return self.max_size
 
 class LetterworldChainSinkSampler(DFASampler):
     def __init__(self, propositions, length, num_avoid):

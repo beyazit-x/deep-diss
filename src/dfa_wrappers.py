@@ -20,15 +20,7 @@ class DFAEnv(gym.Wrapper):
         # Q = self.num_states_upper
         # m = Q * (Q-1) / 2
         # F = self.num_states_upper - 1
-        Q = self.sampler.get_n_states()
-        F = self.sampler.get_n_accepting_states()
-        E = self.sampler.get_n_alphabet()
-        m = self.sampler.get_n_transitions()
-
-        b_Q = math.ceil(math.log(Q, 2))
-        b_E = math.ceil(math.log(E, 2))
-
-        self.N = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
+        self.N = self.sampler.get_size_bound()
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})
