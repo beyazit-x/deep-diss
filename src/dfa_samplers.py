@@ -20,7 +20,7 @@ from copy import deepcopy
 from pysat.solvers import Solver
 from pythomata.impl.simple import SimpleNFA as NFA 
 from scipy.special import softmax
-import dfa
+from dfa import DFA, dfa2dict
 
 from utils.parameters import TIMEOUT_SECONDS, FEATURE_SIZE
 
@@ -116,7 +116,7 @@ def _chain(xs, alphabet):
             return tuple(tail)
         return s
 
-    return dfa.DFA(
+    return DFA(
         start=tuple(xs),
         inputs=alphabet,
         outputs={False, True},
@@ -174,7 +174,7 @@ def _accept_reach_avoid(sub_dfa, reach, avoid, alphabet):
         # return (reach_avoid_state, next_sub_dfa_state)
 
 
-    return dfa.DFA(
+    return DFA(
         start=(0b00, sub_dfa.start),
         inputs=alphabet,
         outputs={True, False},
@@ -224,7 +224,7 @@ def _reach_avoid(reach, avoid, alphabet):
             return 0b01
         return s
 
-    return dfa.DFA(
+    return DFA(
         start=0b00,
         inputs=alphabet,
         outputs={True, False},
@@ -242,7 +242,7 @@ class UniversalSampler(DFASampler):
         augmented_props = list(propositions)
         augmented_props.remove('white')
 
-        self.enumerated_dfas = [dfa.DFA.from_int(dfa_int, inputs=augmented_props) for dfa_int in enumerated_dfas]
+        self.enumerated_dfas = [DFA.from_int(dfa_int, inputs=augmented_props) for dfa_int in enumerated_dfas]
         sizes = np.array([len(bin(dfa_int)) for dfa_int in enumerated_dfas])
         # print(np.average(sizes))
         self.weights = softmax(-sizes * temp)
@@ -285,8 +285,8 @@ class ListSampler(DFASampler):
             for line in f:
                 self.dfa_ints.append(int(line))
 
-        # self.enumerated_dfas = [dfa.DFA.from_int(dfa_int, inputs=propositions) for dfa_int in dfa_ints]
-        empty_dfa = dfa.DFA(start=False, label=lambda _: False, transition=lambda *_: False, inputs={'red', 'yellow','blue', 'green'})
+        # self.enumerated_dfas = [DFA.from_int(dfa_int, inputs=propositions) for dfa_int in dfa_ints]
+        empty_dfa = DFA(start=False, label=lambda _: False, transition=lambda *_: False, inputs={'red', 'yellow','blue', 'green'})
         empty_size = len(bin(empty_dfa.to_int()))
         self.max_size = max([len(bin(d)) for d in self.dfa_ints])
         self.weights = [len(bin(d)) - empty_size for d in self.dfa_ints]
@@ -295,7 +295,7 @@ class ListSampler(DFASampler):
         # random_size = np.random.choice(self.sizes, p=self.weights)
         # return deepcopy(np.random.choice(self.enumerated_dfas_dict[random_size]))
 
-        return dfa.DFA.from_int(np.random.choice(self.dfa_ints), inputs=self.propositions)
+        return DFA.from_int(np.random.choice(self.dfa_ints), inputs=self.propositions)
 
     def get_size_bound(self):
         return self.max_size
@@ -342,7 +342,7 @@ class LetterworldChainSinkSampler(DFASampler):
                 s = self.chain_length + 1 # put in final state
             return s
 
-        fixed_dfa = dfa.DFA(start=0,
+        fixed_dfa = DFA(start=0,
                             inputs=self.propositions,
                             outputs={False, True},
                             label=lambda s: s == self.chain_length,
@@ -379,7 +379,7 @@ class LetterworldChainSampler(DFASampler):
                 s = s + 1
             return s
 
-        fixed_dfa = dfa.DFA(start=0,
+        fixed_dfa = DFA(start=0,
                             inputs=self.propositions,
                             outputs={False, True},
                             label=lambda s: s == self.chain_length,
@@ -401,7 +401,7 @@ class FixedLetterworldChainSampler(DFASampler):
 
 
     def sample_dfa_formula(self):
-        fixed_dfa = dfa.DFA(start=0,
+        fixed_dfa = DFA(start=0,
                             inputs=self.propositions,
                             outputs={False, True},
                             label=lambda s: s == self.chain_length,
@@ -437,7 +437,7 @@ class FixedLetterworldSampler(DFASampler):
 
 
     def sample_dfa_formula(self):
-        fixed_dfa = dfa.DFA(start=0,
+        fixed_dfa = DFA(start=0,
                             inputs=self.propositions,
                             outputs={False, True},
                             label=lambda s: s == 3,
@@ -472,7 +472,7 @@ class FixedGridworldSampler(DFASampler):
 
 
     def sample_dfa_formula(self):
-        fixed_dfa = dfa.DFA(start=0,
+        fixed_dfa = DFA(start=0,
                             inputs={'blue', 'green', 'red', 'yellow', 'white'},
                             outputs={False, True},
                             label=lambda s: s == 3,
@@ -488,18 +488,22 @@ class EventuallySampler(DFASampler):
         self.max_conjunctions = int(max_conjunctions)
         self.min_levels = int(min_levels)
         self.max_levels = int(max_levels)
-
-    def get_concept_class(self):
-        raise NotImplemented
+        self.worst_case_dfa, _ = dfa2dict(self._sample(self.max_levels, self.max_levels, self.max_conjunctions, self.max_conjunctions, 1.0)[0][0])
+        self.n_states = 0
+        self.n_transitions = 0
+        for s1, (_, kids) in self.worst_case_dfa.items():
+            self.n_states += 1
+            self.n_transitions += sum(s1 != s2 for s2 in kids.values())
 
     def get_n_states(self):
-        return (self.max_levels + 1) * self.max_conjunctions
+        # return (self.max_levels + 1)**self.max_conjunctions
+        return self.n_states
 
     def get_n_accepting_states(self):
         return 1
 
     def get_n_transitions(self):
-        return 10000
+        return self.n_transitions
 
     def get_n_conjunctions(self):
         return 1
@@ -507,15 +511,32 @@ class EventuallySampler(DFASampler):
     def get_n_disjunctions(self):
         return 1
 
+    def get_size_bound(self):
+        return self._get_size_bound()
+
+    def _get_size_bound(self):
+        Q = self.get_n_states()
+        F = self.get_n_accepting_states()
+        E = self.get_n_alphabet()
+        m = self.get_n_transitions()
+
+        b_Q = math.ceil(math.log(Q, 2))
+        b_E = math.ceil(math.log(E, 2))
+
+        return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1) + 12
+
     def sample(self):
-        conjs = random.randint(self.min_conjunctions, self.max_conjunctions)
-        seqs = tuple(self.sample_sequence() for _ in range(conjs))
+        return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions, 0.25)
+
+    def _sample(self, min_levels, max_levels, min_conjunctions, max_conjunctions, p=0.25):
+        conjs = random.randint(min_conjunctions, max_conjunctions)
+        seqs = tuple(self._sample_sequence(min_levels, max_levels, p) for _ in range(conjs))
         def delta(s, c):
             for i in range(len(s)):
                 if s[i] != () and c in s[i][0]:
                     return s[:i] + (s[i][1:],) + s[i + 1:]
             return s
-        return ((dfa.DFA(
+        return ((DFA(
             start=seqs,
             inputs=self.propositions,
             label=lambda s: s == tuple(tuple() for _ in range(conjs)),
@@ -523,15 +544,18 @@ class EventuallySampler(DFASampler):
         ),),)
 
     def sample_sequence(self):
+        return self._sample_sequence(self.min_levels, self.max_levels, 0.25)
+
+    def _sample_sequence(self, min_levels, max_levels, p=0.25):
         length = random.randint(self.min_levels, self.max_levels)
         seq = []
 
         last = []
         while len(seq) < length:
             # Randomly replace some propositions with a disjunction to make more complex formulas
-            population = [p for p in self.propositions if p not in last]
+            population = [s for s in self.propositions if s not in last]
 
-            if random.random() < 0.25:
+            if random.random() < p:
                 c = random.sample(population, 2)
             else:
                 c = random.sample(population, 1)
@@ -543,14 +567,18 @@ class EventuallySampler(DFASampler):
 
 class CompositionalEventuallySampler(EventuallySampler):
     def __init__(self, propositions, min_levels = 1, max_levels=4, min_conjunctions=1, max_conjunctions=3):
-        super().__init__(propositions, min_levels, max_levels, min_conjunctions, max_conjunctions)
+        super().__init__(propositions, min_levels, max_levels, 1, 1)
         assert(len(propositions) >= 3)
 
     def sample(self):
         conjs = random.randint(self.min_conjunctions, self.max_conjunctions)
         seqs = tuple(self.sample_sequence() for _ in range(conjs))
-        dfas = tuple(dfa.DFA(start=seq, inputs=self.propositions, label=lambda s: s == tuple(), transition=lambda s, c: s[1:] if s != () and c in s[0] else s) for seq in seqs)
+        dfas = tuple(DFA(start=seq, inputs=self.propositions, label=lambda s: s == tuple(), transition=lambda s, c: s[1:] if s != () and c in s[0] else s) for seq in seqs)
         return tuple((dfa,) for dfa in dfas)
+
+    def get_size_bound(self):
+        size_per_dfa = self._get_size_bound()
+        return size_per_dfa * self.max_conjunctions
 
     def get_n_conjunctions(self):
         return self.max_conjunctions
@@ -568,7 +596,7 @@ class AdversarialEnvSampler(DFASampler):
                 elif s == 1 and c == 'b':
                     return 2
                 return s
-            return dfa.DFA(
+            return DFA(
                 start=0,
                 inputs=self.propositions,
                 label=lambda s: s == 2,
@@ -581,7 +609,7 @@ class AdversarialEnvSampler(DFASampler):
                 elif s == 1 and c == 'c':
                     return 2
                 return s
-            return dfa.DFA(
+            return DFA(
                 start=0,
                 inputs=self.propositions,
                 label=lambda s: s == 2,

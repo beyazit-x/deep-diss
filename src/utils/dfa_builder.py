@@ -1,5 +1,6 @@
 import dgl
 import ring
+import torch
 import numpy as np
 import networkx as nx
 from dfa import DFA, dfa2dict
@@ -81,13 +82,28 @@ class DFABuilder(object):
         if (library == "networkx"):
             return nxg
 
-        # convert the Networkx graph to dgl graph and pass the 'feat' attribute
-        if DGL5_COMPAT:
-            # print(nx.get_node_attributes(nxg, 'feat'))
-            g = dgl.from_networkx(nxg, node_attrs=np.array(["feat", "is_root"]), edge_attrs=np.array(["type"]), device=self.device)
-        else:
-            g = dgl.DGLGraph()
-            g.from_networkx(nxg, node_attrs=np.array(["feat", "is_root"]), edge_attrs=np.array(["type"]), device=self.device)
+        return self._get_dgl_graph(nxg)
+
+    def _get_dgl_graph(self, nxg):
+
+        edges = list(nxg.edges)
+        nodes = list(nxg.nodes)
+        edge_types_attributes = nx.get_edge_attributes(nxg, "type")
+
+        U, V, _type = zip(*[(nodes.index(edge[0]), nodes.index(edge[1]), edge_types_attributes[edge]) for edge in edges])
+        _feat, _is_root = zip(*[(nxg.nodes[node]["feat"], nxg.nodes[node]["is_root"]) for node in nodes])
+
+        U = torch.from_numpy(np.array(U))
+        V = torch.from_numpy(np.array(V))
+        _type = torch.from_numpy(np.array(_type))
+        _feat = torch.from_numpy(np.array(_feat))
+        _is_root = torch.from_numpy(np.array(_is_root))
+
+        g = dgl.graph((U, V), device=self.device)
+        g.ndata["feat"] = _feat
+        g.ndata["is_root"] = _is_root
+        g.edata["type"] = _type
+
         return g
 
     def _get_guard_embeddings(self, guard):
