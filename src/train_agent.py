@@ -8,7 +8,7 @@ from stable_baselines3 import DQN, SAC
 from softDQN import SoftDQN
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_checker import check_env
-from feature_extractor import CustomCombinedExtractor
+from features_extractor import CustomCombinedExtractor
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, ProgressBarCallback, CheckpointCallback
 
@@ -25,8 +25,8 @@ from collections import deque
 
 from dfa_identify.concept_class_restrictions import enforce_chain, enforce_reach_avoid_seq
 
-import wandb
-from wandb.integration.sb3 import WandbCallback
+# import wandb
+# from wandb.integration.sb3 import WandbCallback
 
 from utils.parameters import GNN_EMBEDDING_SIZE
 
@@ -294,8 +294,8 @@ if __name__ == "__main__":
                             help="fraction of entire training period over which the exploration rate is reduced")
     parser.add_argument("--batch-size", type=int, default=8,
                             help="buffer size")
-    parser.add_argument("--reject-reward", type=int, default=0,
-                            help="how much reward should we give in non-accepting sink states? A form of reward shaping")
+    parser.add_argument("--reject-reward", type=int, default=-1,
+                            help="default is -1")
     parser.add_argument("--save-gnn-path", default=None,
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
@@ -313,14 +313,14 @@ if __name__ == "__main__":
 
     # setup wandb
 
-    run = wandb.init(
-	config=args,
-	sync_tensorboard=True,  # automatically upload SB3's tensorboard metrics to W&B
-        entity='nlauffer',
-	project="deep-diss",
-	monitor_gym=True,       # automatically upload gym environements' videos
-	save_code=False,
-    )
+    # run = wandb.init(
+	# config=args,
+	# sync_tensorboard=True,  # automatically upload SB3's tensorboard metrics to W&B
+    #     entity='nlauffer',
+	# project="deep-diss",
+	# monitor_gym=True,       # automatically upload gym environements' videos
+	# save_code=False,
+    # )
 
     env = make_env(args.env, args.sampler, args.reject_reward, seed=args.seed)
     # single_env = env
@@ -335,32 +335,32 @@ if __name__ == "__main__":
     print("------------------------------------------------")
 
 
-    wandb_callback=WandbCallback(
-        gradient_save_freq=0,
-        # model_save_path=f"models/{run.id}",
-        verbose=2,
-        )
+    # wandb_callback=WandbCallback(
+    #     gradient_save_freq=0,
+    #     # model_save_path=f"models/{run.id}",
+    #     verbose=2,
+    #     )
 
     discounted_reward_callback = DiscountedRewardCallback(args.gamma)
 
-    checkpoint_callback = CheckpointCallback(
-        save_freq=25000,
-        save_path=wandb.run.dir,
-        name_prefix="checkpoint",
-        save_replay_buffer=False,
-        save_vecnormalize=False,
-    )
+    # checkpoint_callback = CheckpointCallback(
+    #     save_freq=25000,
+    #     # save_path=wandb.run.dir,
+    #     name_prefix="checkpoint",
+    #     save_replay_buffer=False,
+    #     save_vecnormalize=False,
+    # )
 
-    wandb.save(os.path.join(wandb.run.dir, "checkpoint*"))
+    # wandb.save(os.path.join(wandb.run.dir, "checkpoint*"))
 
-    callback_list = [discounted_reward_callback, wandb_callback, checkpoint_callback]
+    # callback_list = [discounted_reward_callback, wandb_callback, checkpoint_callback]
+    callback_list = [discounted_reward_callback]
     if args.mid_check:
         callback_list.append(checkpoint_callback)
 
     tensorboard_dir = "./wandb_sweep_relabel_" + args.relabeler
 
-    obs_space = {"image": env.observation_space['features'].shape, "text": env.observation_space['dfa'].n}
-    env_model = getEnvModel(env, obs_space)
+    env_model = getEnvModel(env, env.observation_space['features'].shape)
     features_dim = env_model.embedding_size + GNN_EMBEDDING_SIZE
 
     policy = None

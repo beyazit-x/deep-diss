@@ -37,36 +37,37 @@ class DFASampler():
     def get_concept_class(self):
         raise NotImplemented
 
-    # def get_n_states(self):
-    #     raise NotImplemented
+    def get_n_states(self):
+        raise NotImplemented
 
-    # def get_n_accepting_states(self):
-    #     raise NotImplemented
+    def get_n_accepting_states(self):
+        raise NotImplemented
 
-    # def get_n_alphabet(self):
-    #     raise NotImplemented
+    def get_n_alphabet(self):
+        return len(self.propositions) + 1 # +1 is for empty string
 
-    # def get_n_transitions(self):
-    #     raise NotImplemented
+    def get_n_transitions(self):
+        raise NotImplemented
 
     def get_size_bound(self):
-        Q = self.sampler.get_n_states()
-        F = self.sampler.get_n_accepting_states()
-        E = self.sampler.get_n_alphabet()
-        m = self.sampler.get_n_transitions()
+        Q = self.get_n_states()
+        F = self.get_n_accepting_states()
+        E = self.get_n_alphabet()
+        m = self.get_n_transitions()
 
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
 
         return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
 
-    def sample_dfa_formula(self):
+    def get_n_conjunctions(self):
+        raise NotImplemented
+
+    def get_n_disjunctions(self):
         raise NotImplemented
 
     def sample(self):
-        dfa = self.sample_dfa_formula()
-        init_node, accepting_states, nxg = self.dfa2nxg(dfa)
-        return deepcopy(self._format(init_node,accepting_states,nxg))
+        raise NotImplemented
 
 # Samples from one of the other samplers at random. The other samplers are sampled by their default args.
 class SuperSampler(DFASampler):
@@ -295,9 +296,18 @@ class ListSampler(DFASampler):
         # return deepcopy(np.random.choice(self.enumerated_dfas_dict[random_size]))
 
         return dfa.DFA.from_int(np.random.choice(self.dfa_ints), inputs=self.propositions)
-    
+
     def get_size_bound(self):
         return self.max_size
+
+    def get_n_states(self):
+        return 20
+
+    def get_n_accepting_states(self):
+        return 10
+
+    def get_n_transitions(self):
+        return 50
 
 class LetterworldChainSinkSampler(DFASampler):
     def __init__(self, propositions, length, num_avoid):
@@ -313,9 +323,6 @@ class LetterworldChainSinkSampler(DFASampler):
 
     def get_n_accepting_states(self):
         return 1
-
-    def get_n_alphabet(self):
-        return len(self.propositions) + 1 # +1 is for empty string
 
     def get_n_transitions(self):
         return self.chain_length + self.num_avoid * (self.chain_length + 1)
@@ -359,9 +366,6 @@ class LetterworldChainSampler(DFASampler):
 
     def get_n_accepting_states(self):
         return 1
-
-    def get_n_alphabet(self):
-        return len(self.propositions) + 1 # +1 is for empty string
 
     def get_n_transitions(self):
         return self.chain_length
@@ -476,140 +480,50 @@ class FixedGridworldSampler(DFASampler):
 
         return fixed_dfa
 
-
-class UntilTaskSampler(DFASampler):
-    def __init__(self, propositions, min_levels=1, max_levels=2, min_conjunctions=1 , max_conjunctions=2):
-        super().__init__(propositions)
-        self.levels       = (int(min_levels), int(max_levels))
-        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
-        assert 2*int(max_levels)*int(max_conjunctions) <= len(propositions), "The domain does not have enough propositions!"
-
-    def sample_dfa_formula(self):
-
-        n_conjs = random.randint(*self.conjunctions)
-        p = random.sample(self.propositions,2*self.levels[1]*n_conjs)
-        dfa_task = None
-        b = 0
-        for i in range(n_conjs):
-            n_levels = random.randint(*self.levels)
-            # Sampling an until task of *n_levels* levels
-            avoidance_list = [(p[b+1], p[b])]
-            b +=2
-            for j in range(1,n_levels):
-                avoidance_list.append((p[b+1], p[b]))
-                b +=2
-            until_task_nfa = avoidance(avoidance_list[::-1], set(self.propositions))
-            until_task_dfa = until_task_nfa.determinize().trim().minimize()
-            until_task_mvc = dfa.DFA(
-                start=until_task_dfa.initial_state,
-                inputs=self.propositions,
-                label=lambda s: s in until_task_dfa.accepting_states,
-                transition=lambda s, c: until_task_dfa.transition_function[s][c],
-            ).normalize()
- 
-            # Adding the until task to the conjunction of formulas that the agent have to solve
-            if dfa_task is None: dfa_task = until_task_mvc
-            else:                dfa_task = until_task_mvc & dfa_task
-        return dfa_task
-
-    def sample_ltl_formula(self):
-        # Sampling a conjuntion of *n_conjs* (not p[0]) Until (p[1]) formulas of *n_levels* levels
-        n_conjs = random.randint(*self.conjunctions)
-        p = random.sample(self.propositions,2*self.levels[1]*n_conjs)
-        ltl = None
-        b = 0
-        for i in range(n_conjs):
-            n_levels = random.randint(*self.levels)
-            # Sampling an until task of *n_levels* levels
-            until_task = ('until',('not',p[b]),p[b+1])
-            b +=2
-            for j in range(1,n_levels):
-                until_task = ('until',('not',p[b]),('and', p[b+1], until_task))
-                b +=2
-            # Adding the until task to the conjunction of formulas that the agent have to solve
-            if ltl is None: ltl = until_task
-            else:           ltl = ('and',until_task,ltl)
-        return ltl
-
-
-class UntilLTLTaskSampler(DFASampler):
-    def __init__(self, propositions, min_levels=1, max_levels=2, min_conjunctions=1 , max_conjunctions=2):
-        super().__init__(propositions)
-        self.levels       = (int(min_levels), int(max_levels))
-        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
-        assert 2*int(max_levels)*int(max_conjunctions) <= len(propositions), "The domain does not have enough propositions!"
-
-    def sample_ltl_formula(self):
-        # Sampling a conjuntion of *n_conjs* (not p[0]) Until (p[1]) formulas of *n_levels* levels
-        n_conjs = random.randint(*self.conjunctions)
-        p = random.sample(self.propositions,2*self.levels[1]*n_conjs)
-        ltl = None
-        b = 0
-        for i in range(n_conjs):
-            n_levels = random.randint(*self.levels)
-            # Sampling an until task of *n_levels* levels
-            until_task = ('until',('not',p[b]),p[b+1])
-            b +=2
-            for j in range(1,n_levels):
-                until_task = ('until',('not',p[b]),('and', p[b+1], until_task))
-                b +=2
-            # Adding the until task to the conjunction of formulas that the agent have to solve
-            if ltl is None: ltl = until_task
-            else:           ltl = ('and',until_task,ltl)
-        return ltl
-
-# This class generates random LTL formulas that form a sequence of actions.
-# @ min_len, max_len: min/max length of the random sequence to generate.
-class SequenceSampler(DFASampler):
-    def __init__(self, propositions, min_len=2, max_len=4):
-        super().__init__(propositions)
-        self.min_len = int(min_len)
-        self.max_len = int(max_len)
-
-    def sample_ltl_formula(self):
-        length = random.randint(self.min_len, self.max_len)
-        seq = ""
-
-        while len(seq) < length:
-            c = random.choice(self.propositions)
-            if len(seq) == 0 or seq[-1] != c:
-                seq += c
-
-        ret = self._get_sequence(seq)
-
-        return ret
-
-    def _get_sequence(self, seq):
-        if len(seq) == 1:
-            return ('eventually',seq)
-        return ('eventually',('and', seq[0], self._get_sequence(seq[1:])))
-
-# This generates several sequence tasks which can be accomplished in parallel. 
-# e.g. in (eventually (a and eventually c)) and (eventually b)
-# the two sequence tasks are "a->c" and "b".
-class EventuallyLTLSampler(DFASampler):
+class EventuallySampler(DFASampler):
     def __init__(self, propositions, min_levels = 1, max_levels=4, min_conjunctions=1, max_conjunctions=3):
         super().__init__(propositions)
         assert(len(propositions) >= 3)
-        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
-        self.levels = (int(min_levels), int(max_levels))
+        self.min_conjunctions = int(min_conjunctions)
+        self.max_conjunctions = int(max_conjunctions)
+        self.min_levels = int(min_levels)
+        self.max_levels = int(max_levels)
 
-    def sample_ltl_formula(self):
-        conjs = random.randint(*self.conjunctions)
-        ltl = None
+    def get_concept_class(self):
+        raise NotImplemented
 
-        for i in range(conjs):
-            task = self.sample_sequence()
-            if ltl is None:
-                ltl = task
-            else:
-                ltl = ('and',task,ltl)
+    def get_n_states(self):
+        return (self.max_levels + 1) * self.max_conjunctions
 
-        return ltl
+    def get_n_accepting_states(self):
+        return 1
 
+    def get_n_transitions(self):
+        return 100
+
+    def get_n_conjunctions(self):
+        return 1
+
+    def get_n_disjunctions(self):
+        return 1
+
+    def sample(self):
+        conjs = random.randint(self.min_conjunctions, self.max_conjunctions)
+        seqs = tuple(self.sample_sequence() for _ in range(conjs))
+        def delta(s, c):
+            for i in range(len(s)):
+                if s[i] != () and c in s[i][0]:
+                    return s[:i] + (s[i][1:],) + s[i + 1:]
+            return s
+        return (((dfa.DFA(
+            start=seqs,
+            inputs=self.propositions,
+            label=lambda s: s == tuple(tuple() for _ in range(conjs)),
+            transition=delta,
+        ),),),)
 
     def sample_sequence(self):
-        length = random.randint(*self.levels)
+        length = random.randint(self.min_levels, self.max_levels)
         seq = []
 
         last = []
@@ -622,89 +536,64 @@ class EventuallyLTLSampler(DFASampler):
             else:
                 c = random.sample(population, 1)
 
-            seq.append(c)
+            seq.append(tuple(c))
             last = c
 
-        ret = self._get_sequence(seq)
+        return tuple(seq)
 
-        return ret
-
-    def _get_sequence(self, seq):
-        term = seq[0][0] if len(seq[0]) == 1 else ('or', seq[0][0], seq[0][1])
-        if len(seq) == 1:
-            return ('eventually',term)
-        return ('eventually',('and', term, self._get_sequence(seq[1:])))
-
-### DFA version of the EventuallySampler
-class EventuallySampler(DFASampler):
+class CompositionalEventuallySampler(EventuallySampler):
     def __init__(self, propositions, min_levels = 1, max_levels=4, min_conjunctions=1, max_conjunctions=3):
-        super().__init__(propositions)
+        super().__init__(propositions, min_levels, max_levels, min_conjunctions, max_conjunctions)
         assert(len(propositions) >= 3)
-        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
-        self.levels = (int(min_levels), int(max_levels))
 
-    def sample_dfa_formula(self):
-        conjs = random.randint(*self.conjunctions)
-        dfa = None
+    def sample(self):
+        conjs = random.randint(self.min_conjunctions, self.max_conjunctions)
+        seqs = tuple(self.sample_sequence() for _ in range(conjs))
+        dfas = tuple(dfa.DFA(start=seq, inputs=self.propositions, label=lambda s: s == tuple(), transition=lambda s, c: s[1:] if s != () and c in s[0] else s) for seq in seqs)
+        return tuple((dfa,) for dfa in dfas)
 
-        for i in range(conjs):
-            task = self.sample_sequence()
-            if dfa is None:
-                dfa = task
-            else:
-                dfa = task & dfa
+    def get_n_conjunctions(self):
+        return self.max_conjunctions
 
-        return dfa
-
-
-    def sample_sequence(self):
-        length = random.randint(*self.levels)
-        seq = []
-
-        last = []
-        while len(seq) < length:
-            # Randomly replace some propositions with a disjunction to make more complex formulas
-            population = [p for p in self.propositions if p not in last]
-
-            if random.random() < 0.25:
-                c = tuple(random.sample(population, 2))
-            else:
-                c = tuple(random.sample(population, 1))
-
-            seq.append(c)
-            last = c
-
-        ret = _chain(seq, self.propositions)
-
-        return ret
-
-    # def _get_sequence(self, seq):
-    #     term = seq[0][0] if len(seq[0]) == 1 else ('or', seq[0][0], seq[0][1])
-    #     if len(seq) == 1:
-    #         return ('eventually',term)
-    #     return ('eventually',('and', term, self._get_sequence(seq[1:])))
+    def get_n_disjunctions(self):
+        return 1
 
 class AdversarialEnvSampler(DFASampler):
-    def sample_ltl_formula(self):
+    def sample(self):
         p = random.randint(0,1)
         if p == 0:
-            return ('eventually', ('and', 'a', ('eventually', 'b')))
+            def delta(s, c):
+                if s == 0 and c == 'a':
+                    return 1
+                elif s == 1 and c == 'b':
+                    return 2
+                return s
+            return dfa.DFA(
+                start=0,
+                inputs=self.propositions,
+                label=lambda s: s == 2,
+                transition=delta,
+            )
         else:
-            return ('eventually', ('and', 'a', ('eventually', 'c')))
-    def sample_dfa_formula(self):
-        p = random.randint(0,1)
-        if p == 0:
-            print(_chain([("a"), ("b")], ["a", "b"]))
-            input()
-        else:
-            print(_chain([("a"), ("b")], ["a", "b"]))
-            input()
+            def delta(s, c):
+                if s == 0 and c == 'a':
+                    return 1
+                elif s == 1 and c == 'c':
+                    return 2
+                return s
+            return dfa.DFA(
+                start=0,
+                inputs=self.propositions,
+                label=lambda s: s == 2,
+                transition=delta,
+            )
 
 def getRegisteredSamplers(propositions):
     return [SequenceSampler(propositions),
             UntilTaskSampler(propositions),
             DefaultSampler(propositions),
-            EventuallySampler(propositions)]
+            EventuallySampler(propositions),
+            CompositionalEventuallySampler(propositions)]
 
 # The DFASampler factory method that instantiates the proper sampler
 # based on the @sampler_id.
@@ -729,20 +618,8 @@ def getDFASampler(sampler_id, propositions):
         return AdversarialEnvSampler(propositions)
     elif (tokens[0] == "Eventually"):
         return EventuallySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
-    elif (tokens[0] == "Universal"):
-        return UniversalSampler(propositions, tokens[1])
-    elif (tokens[0] == "List"):
-        return ListSampler(propositions, tokens[1])
-    elif (tokens[0] == "FixedGridworld"):
-        return FixedGridworldSampler(propositions)
-    elif (tokens[0] == "FixedLetterworld"):
-        return FixedLetterworldSampler(propositions)
-    elif (tokens[0] == "FixedLetterworldChain"):
-        return FixedLetterworldChainSampler(propositions)
-    elif (tokens[0] == "LetterworldChain"):
-        return LetterworldChainSampler(propositions, tokens[1])
-    elif (tokens[0] == "LetterworldChainSink"):
-        return LetterworldChainSinkSampler(propositions, tokens[1], tokens[2])
+    elif (tokens[0] == "CompositionalEventually"):
+        return CompositionalEventuallySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
     else: # "Default"
         return DefaultSampler(propositions)
 
