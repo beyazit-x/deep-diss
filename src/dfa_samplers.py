@@ -499,7 +499,7 @@ class EventuallySampler(DFASampler):
         return 1
 
     def get_n_transitions(self):
-        return 100
+        return 10000
 
     def get_n_conjunctions(self):
         return 1
@@ -515,12 +515,12 @@ class EventuallySampler(DFASampler):
                 if s[i] != () and c in s[i][0]:
                     return s[:i] + (s[i][1:],) + s[i + 1:]
             return s
-        return (((dfa.DFA(
+        return ((dfa.DFA(
             start=seqs,
             inputs=self.propositions,
             label=lambda s: s == tuple(tuple() for _ in range(conjs)),
             transition=delta,
-        ),),),)
+        ),),)
 
     def sample_sequence(self):
         length = random.randint(self.min_levels, self.max_levels)
