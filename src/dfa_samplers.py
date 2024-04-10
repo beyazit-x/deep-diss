@@ -370,6 +370,15 @@ class LetterworldChainSampler(DFASampler):
     def get_n_transitions(self):
         return self.chain_length
 
+    def get_n_conjunctions(self):
+        return 1
+
+    def get_n_disjunctions(self):
+        return 1
+
+    def sample(self):
+        return ((self.sample_dfa_formula(),),)
+
     def sample_dfa_formula(self):
 
         prop_order = random.choices(self.propositions, k=self.chain_length)
@@ -648,6 +657,20 @@ def getDFASampler(sampler_id, propositions):
         return EventuallySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
     elif (tokens[0] == "CompositionalEventually"):
         return CompositionalEventuallySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
+    elif (tokens[0] == "Universal"):
+        return UniversalSampler(propositions, tokens[1])
+    elif (tokens[0] == "List"):
+        return ListSampler(propositions, tokens[1])
+    elif (tokens[0] == "FixedGridworld"):
+        return FixedGridworldSampler(propositions)
+    elif (tokens[0] == "FixedLetterworld"):
+        return FixedLetterworldSampler(propositions)
+    elif (tokens[0] == "FixedLetterworldChain"):
+        return FixedLetterworldChainSampler(propositions)
+    elif (tokens[0] == "LetterworldChain"):
+        return LetterworldChainSampler(propositions, tokens[1])
+    elif (tokens[0] == "LetterworldChainSink"):
+        return LetterworldChainSinkSampler(propositions, tokens[1], tokens[2])
     else: # "Default"
         return DefaultSampler(propositions)
 

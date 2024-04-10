@@ -19,6 +19,7 @@ class DFAEnv(gym.Wrapper):
         self.N = self.sampler.get_size_bound()
         self.dfa_n_conjunctions = self.sampler.get_n_conjunctions()
         self.dfa_n_disjunctions = self.sampler.get_n_disjunctions()
+        self.per_dfa_bin_size = self.N // (self.dfa_n_conjunctions * self.dfa_n_disjunctions)
 
         self.observation_space = spaces.Dict({"features": env.observation_space,
                                               "dfa"     : spaces.MultiBinary(self.N)})
@@ -30,17 +31,14 @@ class DFAEnv(gym.Wrapper):
 
     def _to_bin(self, dfa_goal):
         seqs = []
-        n_conjunctions = self.sampler.get_n_conjunctions()
-        n_disjunctions = self.sampler.get_n_disjunctions()
-        seq_size = self.N // (n_conjunctions * n_disjunctions)
         for dfa_clause in dfa_goal:
             for dfa in dfa_clause:
-                seqs.append(self.get_binary_seq(dfa.to_int(), seq_size))
-            for _ in range(n_disjunctions - len(dfa_clause)):
-                seqs.append(np.zeros(seq_size))
-        for _ in range(n_conjunctions - len(dfa_goal)):
-            for _ in range(n_disjunctions):
-                seqs.append(np.zeros(seq_size))
+                seqs.append(self.get_binary_seq(dfa.to_int()))
+            for _ in range(self.dfa_n_disjunctions - len(dfa_clause)):
+                seqs.append(np.zeros(self.per_dfa_bin_size))
+        for _ in range(self.dfa_n_conjunctions - len(dfa_goal)):
+            for _ in range(self.dfa_n_disjunctions):
+                seqs.append(np.zeros(self.per_dfa_bin_size))
         return np.concatenate(seqs)
 
     def _advance(self, dfa_goal, truth_assignment):
@@ -153,10 +151,10 @@ class DFAEnv(gym.Wrapper):
         # NOTE: The events are represented by a string containing the propositions with positive values only (e.g., "ac" means that only propositions 'a' and 'b' hold)
         return self.env.get_events()
 
-    def get_binary_seq(self, dfa_int, size):
+    def get_binary_seq(self, dfa_int):
         binary_string = bin(dfa_int)[2:]
         binary_seq = np.array([int(i) for i in binary_string])
-        return np.pad(binary_seq, (size - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
+        return np.pad(binary_seq, (self.per_dfa_bin_size - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
     def get_dfa_from_binary_seq(self, dfa_binary_seq):
         dfa_binary_str = "".join(str(int(i)) for i in dfa_binary_seq.squeeze().tolist())
