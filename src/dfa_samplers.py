@@ -505,19 +505,26 @@ class EventuallySampler(DFASampler):
         self.max_conjunctions = int(max_conjunctions)
         self.min_levels = int(min_levels)
         self.max_levels = int(max_levels)
-        self.worst_case_dfa, _ = dfa2dict(self._sample(self.max_levels, self.max_levels, self.max_conjunctions, self.max_conjunctions, 1.0)[0][0])
+        self.worst_case_dfa = self._sample(self.max_levels, self.max_levels, self.max_conjunctions, self.max_conjunctions, 1.0)[0][0]
+        self.n_alphabet = len(self.worst_case_dfa.inputs)
         self.n_states = 0
+        self.n_accepting_states = 0
         self.n_transitions = 0
-        for s1, (_, kids) in self.worst_case_dfa.items():
+        for s in self.worst_case_dfa.states():
             self.n_states += 1
-            self.n_transitions += sum(s1 != s2 for s2 in kids.values())
+            self.n_transitions += sum(s != self.worst_case_dfa._transition(s, a) for a in self.worst_case_dfa.inputs)
+            if self.worst_case_dfa._label(s):
+                self.n_accepting_states += 1
+        self.n_transitions = (self.n_transitions//2 + 1)*2
+
+    def get_n_alphabet(self):
+        return self.n_alphabet
 
     def get_n_states(self):
-        # return (self.max_levels + 1)**self.max_conjunctions
         return self.n_states
 
     def get_n_accepting_states(self):
-        return 1
+        return self.n_accepting_states
 
     def get_n_transitions(self):
         return self.n_transitions
@@ -537,10 +544,12 @@ class EventuallySampler(DFASampler):
         E = self.get_n_alphabet()
         m = self.get_n_transitions()
 
+        if F > Q /2: F = Q - F
+
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
 
-        return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1) + 12
+        return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
 
     def sample(self):
         return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions, 0.25)
@@ -564,7 +573,7 @@ class EventuallySampler(DFASampler):
         return self._sample_sequence(self.min_levels, self.max_levels, 0.25)
 
     def _sample_sequence(self, min_levels, max_levels, p=0.25):
-        length = random.randint(self.min_levels, self.max_levels)
+        length = random.randint(min_levels, max_levels)
         seq = []
 
         last = []
