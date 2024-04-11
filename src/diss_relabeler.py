@@ -78,24 +78,17 @@ def get_diss_dfas(feature, action, propositions, extra_clauses, target_num_state
                 dfas.append(concept.dfa)
                 energies.append(metadata['energy'])
 
-            # print("SAMPLING")
             if DISS_ARGMAX:
                 idx_min = np.argmin(energies)
                 dfa_min = dfas[idx_min]
                 relabeled_dfa = dfa_min
             elif DISS_SOFTMAX_SAMPLE:
-                # print(energies)
                 exp_energies = np.exp(energies) # TODO make this temperature tuneable
                 likelihood = exp_energies / exp_energies.sum()
-                # print(likelihood)
                 softmax_sampled_dfa = np.random.choice(dfas, p=likelihood)
-                # print("chose", dfas.index(softmax_sampled_dfa))
                 relabeled_dfa = softmax_sampled_dfa
-            # print('adding', relabeled_dfa)
             relabeled_dfa_int = relabeled_dfa.to_int()
-            # print("relabeled_dfa_int = ", relabeled_dfa_int)
             q.put(relabeled_dfa_int)
-            # relabeled_dfa_ints.append(relabeled_dfa_int)
     except:
         q.put(None)
 
@@ -120,30 +113,7 @@ class DissRelabeler():
         else:
             raise NotImplemented
 
-    def get_binary_seq(self, dfa):
-        binary_string = bin(dfa.to_int())[2:]
-        binary_seq = np.array([int(i) for i in binary_string])
-        if self.env.N < binary_seq.shape[0]:
-            warnings.warn(f"Description size of the relabeled DFA is more that the upper bound. DFA: {dfa}; description size of the DFA: {binary_seq.shape[0]}, description size upper bound: {self.env.N}")
-            return None
-        return np.pad(binary_seq, (self.env.N - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
-
-    def get_reward_and_done(self, dfa):
-        start_state = dfa.start
-        start_state_label = dfa._label(start_state)
-        states = dfa.states()
-        if start_state_label == True: # If starting state of dfa is accepting, then dfa_reward is 1.0.
-            dfa_reward = 1.0
-            dfa_done = 1.0
-        elif len(states) == 1: # If starting state of dfa is rejecting and dfa has a single state, then dfa_reward is -1.0.
-            dfa_reward = -1.0
-            dfa_done = 1.0
-        else:
-            dfa_reward = 0.0 # If starting state of dfa is rejecting and dfa has a multiple states, then dfa_reward is 0.0.
-            dfa_done = 0.0
-        return dfa_reward, dfa_done
-
-    def step_and_write_relabeled_dfas(self, relabeled_dfa_ints, samples):
+    def step_and_write_relabeled_dfas(self, relabeled_dfa_goals, samples):
 
         features, dfas = samples.observations["features"], samples.observations["dfa"]
         actions = samples.actions
@@ -153,34 +123,34 @@ class DissRelabeler():
 
         end_of_episode_inds, end_of_step_inds = dones.squeeze().nonzero()
 
-        for init_dfa_int, end_of_episode_ind, end_of_step_ind in zip(relabeled_dfa_ints, end_of_episode_inds, end_of_step_inds):
+        for init_dfa_goal, end_of_episode_ind, end_of_step_ind in zip(relabeled_dfa_goals, end_of_episode_inds, end_of_step_inds):
 
-            if init_dfa_int is None: # If subprocess returns None, then do not relabel, just the old dfa
-                warnings.warn("DISS subprocess failed!")
+            if init_dfa_goal is None: # If subprocess returns None, then do not relabel, just the old dfa
+                warnings.warn("Relabelling failed!")
                 continue
 
             events = self.env.get_events_given_obss(features[end_of_episode_ind])
 
-            dfa_int = init_dfa_int
-            dfa = DFA.from_int(dfa_int, self.propositions)
-            dfa_binary_seq = self.get_binary_seq(dfa)
-            if dfa_binary_seq is None:
-                continue
+            dfa_goal = init_dfa_goal
+            try:
+                dfa_binary_seq = self.env._to_bin(dfa_goal)
+            except ValueError as e:
+                warnings.warn(f"Description size of the relabeled DFA is more that the upper bound. DFA: {dfa}; description size of the DFA: {binary_seq.shape[0]}, description size upper bound: {self.env.N}, error message: {e}")
 
             # for step_ind in range(end_of_step_ind + 1):
             for step_ind in range(self.env.timeout + 1):
 
                 dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
 
-                dfa = dfa.advance(events[step_ind]).minimize()
-                reward, done = self.get_reward_and_done(dfa)
+                dfa_goal = self.env._minimize(self.env._advance(dfa_goal, events[step_ind]))
+                reward, done, dfa_goal = self.env.get_dfa_goal_reward_and_done(dfa_goal)
 
                 done = done or step_ind == self.env.timeout
 
                 dones[end_of_episode_ind][step_ind] = done
                 rewards[end_of_episode_ind][step_ind] = reward
 
-                dfa_binary_seq = self.get_binary_seq(dfa)
+                dfa_binary_seq = self.env._to_bin(dfa_goal)
                 next_dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
 
                 if done: # It is guaranteed that the done signal will be 1 within the episode.
@@ -207,7 +177,7 @@ class DissRelabeler():
 
         end_of_episode_inds, end_of_step_inds = dones.squeeze().nonzero()
 
-        relabeled_dfa_ints = []
+        relabeled_dfa_goals = []
 
         for end_of_episode_ind, end_of_step_ind in zip(end_of_episode_inds, end_of_step_inds):
 
@@ -218,7 +188,7 @@ class DissRelabeler():
 
             if len(events_clean) < chain_length:
                 # skip this relabel
-                relabeled_dfa_ints.append(None)
+                relabeled_dfa_goals.append(None)
                 continue
 
             probs = np.array([1 for i in range(1, len(events_clean)+1)])
@@ -244,7 +214,7 @@ class DissRelabeler():
 
             if not found_sample:
                 # skip this relabel
-                relabeled_dfa_ints.append(None)
+                relabeled_dfa_goals.append(None)
                 continue
 
             sampled_events = [events_clean[idx] for idx in rand_idxs]
@@ -263,12 +233,11 @@ class DissRelabeler():
                     transition=transition)
 
 
-            dfa_int = dfa.to_int()
-            relabeled_dfa_ints.append(dfa_int)
+            dfa_goal = ((dfa,),)
+            relabeled_dfa_goals.append(dfa_goal)
 
-        self.step_and_write_relabeled_dfas(relabeled_dfa_ints, samples)
+        self.step_and_write_relabeled_dfas(relabeled_dfa_goals, samples)
         self.replay_buffer.relabel_traces(batch_size, samples)
-
 
     def relabel_baseline_chain(self, batch_size):
 
@@ -284,7 +253,7 @@ class DissRelabeler():
 
         end_of_episode_inds, end_of_step_inds = dones.squeeze().nonzero()
 
-        relabeled_dfa_ints = []
+        relabeled_dfa_goals = []
 
         for end_of_episode_ind, end_of_step_ind in zip(end_of_episode_inds, end_of_step_inds):
 
@@ -294,7 +263,7 @@ class DissRelabeler():
             _, chain_length = self.env.sampler.get_concept_class()
 
             if len(events_clean) < chain_length:
-                relabeled_dfa_ints.append(None)
+                relabeled_dfa_goals.append(None)
                 continue
 
             probs = np.array([1 for i in range(1, len(events_clean)+1)])
@@ -314,10 +283,11 @@ class DissRelabeler():
                     label=lambda s: s == chain_length,
                     transition=transition)
 
-            dfa_int = dfa.to_int()
-            relabeled_dfa_ints.append(dfa_int)
+            dfa_goal = ((dfa,),) # In CNF format
 
-        self.step_and_write_relabeled_dfas(relabeled_dfa_ints, samples)
+            relabeled_dfa_goals.append(dfa_goal)
+
+        self.step_and_write_relabeled_dfas(relabeled_dfa_goals, samples)
         self.replay_buffer.relabel_traces(batch_size, samples)
 
     def relabel_diss(self, batch_size):
@@ -336,7 +306,7 @@ class DissRelabeler():
 
         queue = multiprocessing.Queue()
         processes = []
-        relabeled_dfa_ints = []
+        relabeled_dfa_goals = []
         for feature, action, dfa in zip(features, actions, dfas):
 
             self.model.save("data/model")
@@ -350,11 +320,11 @@ class DissRelabeler():
             p.join()
         for p in processes:
             relabeled_dfa_int = queue.get()
-            # print(relabeled_dfa_int)
-            relabeled_dfa_ints.append(relabeled_dfa_int)
+            dfa = DFA.from_int(relabeled_dfa_int, self.env.propositions)
+            dfa_goal = ((dfa,),) # In CNF format
+            relabeled_dfa_goals.append(dfa_goal)
 
-        # print(batch_size, len(relabeled_dfa_ints))
 
-        self.step_and_write_relabeled_dfas(relabeled_dfa_ints, samples)
+        self.step_and_write_relabeled_dfas(relabeled_dfa_goals, samples)
         self.replay_buffer.relabel_traces(batch_size, samples)
 

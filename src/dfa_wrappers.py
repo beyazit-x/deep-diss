@@ -77,33 +77,31 @@ class DFAEnv(gym.Wrapper):
         return dfa_obs, reward, done, info
 
 
-    # def step_given_obs(self, obs, action, time):
+    def step_given_obs(self, obs, action, time):
 
-    #     # advance the environment
-    #     next_feature, original_reward, env_done, info = self.env.step_from_obs(obs["features"], action, time)
+        # advance the environment
+        next_feature, original_reward, env_done, info = self.env.step_from_obs(obs["features"], action, time)
 
-    #     # advance the dfa
-    #     dfa_bin_seq = obs["dfa"]
-    #     dfa = self.get_dfa_from_binary_seq(dfa_bin_seq)
-    #     truth_assignment = self.env.get_events_given_obs(next_feature)
-    #     next_dfa = dfa.advance(truth_assignment)
+        # advance the dfa
+        dfa_bin_seq = obs["dfa"]
+        dfa_goal = self._from_bin(dfa_bin_seq)
+        truth_assignment = self.env.get_events_given_obs(next_feature)
+        next_dfa_goal = self._advance(dfa_goal, truth_assignment)
 
+        if next_dfa_goal != dfa_goal:
+            next_dfa_goal = self._minimize(next_dfa_goal)
+            dfa_reward, dfa_done, next_dfa_goal = self.get_dfa_goal_reward_and_done(next_dfa_goal)
+            next_dfa_bin_seq = np.expand_dims(self._to_bin(next_dfa_goal), axis=0)
+        else:
+            next_dfa_bin_seq = dfa_bin_seq
+            dfa_reward, dfa_done = 0.0, False
 
-    #     if next_dfa != dfa:
-    #         next_dfa = next_dfa.minimize()
-    #         next_dfa_bin_seq = np.expand_dims(self.get_binary_seq(next_dfa), axis=0)
+        next_obs = {'features': next_feature, 'dfa': next_dfa_bin_seq}
 
-    #     else:
-    #         next_dfa_bin_seq = dfa_bin_seq
+        reward  = original_reward + dfa_reward
+        done    = env_done or dfa_done
 
-    #     next_obs = {'features': next_feature, 'dfa': next_dfa_bin_seq}
-
-    #     dfa_reward, dfa_done = self.get_reward_and_done_given_dfa(next_dfa)
-    #     reward  = original_reward + dfa_reward
-    #     done    = env_done or dfa_done
-
-
-    #     return next_obs, reward, done, info
+        return next_obs, reward, done, info
 
     def get_dfa_goal_reward_and_done(self, dfa_goal):
         dfa_clause_rewards = []
@@ -156,8 +154,12 @@ class DFAEnv(gym.Wrapper):
         binary_seq = np.array([int(i) for i in binary_string])
         return np.pad(binary_seq, (self.per_dfa_bin_size - binary_seq.shape[0], 0), 'constant', constant_values=(0, 0))
 
-    def get_dfa_from_binary_seq(self, dfa_binary_seq):
+    def get_dfa_from_bin(self, dfa_binary_seq):
         dfa_binary_str = "".join(str(int(i)) for i in dfa_binary_seq.squeeze().tolist())
         dfa_int = int(dfa_binary_str, 2)
         dfa = DFA.from_int(dfa_int, self.propositions)
         return dfa
+
+    def _from_bin(self, dfa_binary_seq):
+        dfa_binary_seq.reshape(self.dfa_n_conjunctions, self.dfa_n_disjunctions, self.per_dfa_bin_size)
+        return tuple(tuple(get_dfa_from_bin(dfa_bin) for dfa_bin in dfa_clause_bin) for dfa_clause_bin in dfa_binary_seq)

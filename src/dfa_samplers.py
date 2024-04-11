@@ -326,7 +326,15 @@ class LetterworldChainSinkSampler(DFASampler):
 
     def get_n_transitions(self):
         return self.chain_length + self.num_avoid * (self.chain_length + 1)
-    
+
+    def get_n_conjunctions(self):
+        return 1
+
+    def get_n_disjunctions(self):
+        return 1
+
+    def sample(self):
+        return ((self.sample_dfa_formula(),),)
 
     def sample_dfa_formula(self):
 
