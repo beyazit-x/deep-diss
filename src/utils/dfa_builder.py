@@ -40,8 +40,7 @@ class DFABuilder(object):
                 dfa_int_str = "".join(str(int(i)) for i in dfa_int_seq.tolist())
                 dfa_int = int(dfa_int_str)
                 if dfa_int > 0:
-                    dfa = DFA.from_int(dfa_int, self.propositions)
-                    nxg, init_node = self.dfa2nxg(dfa)
+                    nxg, init_node = self.dfa_int2nxg(dfa_int)
                     nxg = nxg.reverse(copy=True)
                     nxg = nx.relabel_nodes(nxg, lambda x: str(i) + "_" + str(j) + "_" + x, copy=True)
                     nxg_clause.append(nxg)
@@ -230,7 +229,9 @@ class DFABuilder(object):
 
         return nxg, init_node
 
-    def dfa2nxg(self, dfa):
+    @ring.lru(maxsize=1000000)
+    def dfa_int2nxg(self, dfa_int):
+        dfa = DFA.from_int(dfa_int, self.propositions)
         dfa_dict, init_state = dfa2dict(dfa)
         init_node, accepting_states, nxg = self.dfa_dict2nxg(dfa_dict, init_state)
         dfa_nxg, init_node = self._format(init_node, accepting_states, nxg)
