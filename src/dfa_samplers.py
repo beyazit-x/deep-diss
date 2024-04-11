@@ -595,6 +595,10 @@ class CompositionalEventuallySampler(EventuallySampler):
     def __init__(self, propositions, min_levels = 1, max_levels=4, min_conjunctions=1, max_conjunctions=3):
         super().__init__(propositions, min_levels, max_levels, 1, 1)
         assert(len(propositions) >= 3)
+        self.min_conjunctions = int(min_conjunctions)
+        self.max_conjunctions = int(max_conjunctions)
+        self.min_levels = int(min_levels)
+        self.max_levels = int(max_levels)
 
     def sample(self):
         conjs = random.randint(self.min_conjunctions, self.max_conjunctions)
