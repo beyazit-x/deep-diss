@@ -40,11 +40,9 @@ class DFABuilder(object):
                 dfa_int_str = "".join(str(int(i)) for i in dfa_int_seq.tolist())
                 dfa_int = int(dfa_int_str)
                 if dfa_int > 0:
-                    nxg, init_node = self.dfa_int2nxg(dfa_int)
-                    nxg = nxg.reverse(copy=True)
-                    nxg = nx.relabel_nodes(nxg, lambda x: str(i) + "_" + str(j) + "_" + x, copy=True)
+                    nxg, init_node = self.dfa_int2nxg(dfa_int, str(i) + "_" + str(j) + "_")
                     nxg_clause.append(nxg)
-                    nxg_init_nodes.append(str(i) + "_" + str(j) + "_" + init_node)
+                    nxg_init_nodes.append(init_node)
 
             if nxg_clause != []:
                 composed_nxg_clause = nx.compose_all(nxg_clause)
@@ -111,35 +109,58 @@ class DFABuilder(object):
             guard = guard.replace(" ", "").replace("(", "").replace(")", "").replace("\"", "")
         except:
             return embeddings
+
         if (guard == "true"):
             return embeddings
-        guard = guard.split("&")
-        cnf = []
-        seen_atoms = []
-        for c in guard:
-            atoms = c.split("|")
-            clause = []
-            for atom in atoms:
-                try:
-                    index = seen_atoms.index(atom if atom[0] != "~" else atom[1:])
-                except:
-                    index = len(seen_atoms)
-                    seen_atoms.append(atom if atom[0] != "~" else atom[1:])
-                clause.append(index + 1 if atom[0] != "~" else -(index + 1))
-            cnf.append(clause)
-        models = []
-        with Solver(bootstrap_with=cnf) as s:
-            models = list(s.enum_models())
-        if len(models) == 0:
+
+        if "&" in guard and "|" not in guard:
+            embedding = [0.0] * FEATURE_SIZE
+            guard = guard.split("&")
+            for atom in guard:
+                embedding[self.propositions.index(atom)] = 1.0
+            embeddings.append(embedding)
             return embeddings
-        for model in models:
-            temp = [0.0] * FEATURE_SIZE
-            for a in model:
-                if a > 0:
-                    atom = seen_atoms[abs(a) - 1]
-                    temp[self.propositions.index(atom)] = 1.0
-            embeddings.append(temp)
-        return embeddings
+        elif "&" not in guard and "|" in guard:
+            guard = guard.split("|")
+            for atom in guard:
+                embedding = [0.0] * FEATURE_SIZE
+                embedding[self.propositions.index(atom)] = 1.0
+                embeddings.append(embedding)
+            return embeddings
+        elif "&" not in guard and "|" not in guard:
+            atom = guard
+            embedding = [0.0] * FEATURE_SIZE
+            embedding[self.propositions.index(atom)] = 1.0
+            embeddings.append(embedding)
+            return embeddings
+        else:
+            guard = guard.split("&")
+            cnf = []
+            seen_atoms = []
+            for c in guard:
+                atoms = c.split("|")
+                clause = []
+                for atom in atoms:
+                    try:
+                        index = seen_atoms.index(atom if atom[0] != "~" else atom[1:])
+                    except:
+                        index = len(seen_atoms)
+                        seen_atoms.append(atom if atom[0] != "~" else atom[1:])
+                    clause.append(index + 1 if atom[0] != "~" else -(index + 1))
+                cnf.append(clause)
+            models = []
+            with Solver(bootstrap_with=cnf) as s:
+                models = list(s.enum_models())
+            if len(models) == 0:
+                return embeddings
+            for model in models:
+                temp = [0.0] * FEATURE_SIZE
+                for a in model:
+                    if a > 0:
+                        atom = seen_atoms[abs(a) - 1]
+                        temp[self.propositions.index(atom)] = 1.0
+                embeddings.append(temp)
+            return embeddings
 
     def _get_onehot_guard_embeddings(self, guard):
         is_there_onehot = False
@@ -167,32 +188,30 @@ class DFABuilder(object):
                 return False
         return True
 
-    def dfa_dict2nxg(self, dfa_dict, init_node, minimize=False):
+    def dfa_dict2nxg(self, dfa_dict, init_node, node_name_prefix):
 
-        init_node = str(init_node)
+        init_node = node_name_prefix + str(init_node)
 
         nxg = nx.DiGraph()
 
         accepting_states = []
         for start, (accepting, transitions) in dfa_dict.items():
-            start = str(start)
+            start = node_name_prefix + str(start)
             nxg.add_node(start)
             if accepting:
                 accepting_states.append(start)
             for action, end in transitions.items():
-                if nxg.has_edge(start, str(end)):
-                    existing_label = nxg.get_edge_data(start, str(end))['label']
-                    nxg.add_edge(start, str(end), label='{} | {}'.format(existing_label, action))
+                end = node_name_prefix + str(end)
+                if nxg.has_edge(start, end):
+                    existing_label = nxg.get_edge_data(start, end)['label']
+                    nxg.add_edge(start, end, label='{} | {}'.format(existing_label, action))
                 else:
-                    nxg.add_edge(start, str(end), label=action)
-
-        # nxg = nx.ego_graph(nxg, init_node, radius=5)
-        accepting_states = list(set(accepting_states).intersection(set(nxg.nodes)))
+                    nxg.add_edge(start, end, label=action)
 
         return init_node, accepting_states, nxg
 
 
-    def _format(self, init_node, accepting_states, nxg):
+    def _format(self, init_node, accepting_states, nxg, node_name_prefix):
         rejecting_states = []
         for node in nxg.nodes:
             if self._is_sink_state(node, nxg) and node not in accepting_states:
@@ -217,25 +236,25 @@ class DFABuilder(object):
             guard = nxg.edges[e]["label"]
             nxg.remove_edge(*e)
             if e[0] == e[1]:
-                continue # We define self loops below
-            onehot_embedding = self._get_onehot_guard_embeddings(guard) # It is ok if we receive a cached embeddding since we do not modify it
+                continue # We define self loops later when composing graphs
+            onehot_embedding = self._get_onehot_guard_embeddings(guard)
             if len(onehot_embedding) == 0:
                 continue
-            new_node_name = new_node_name_base_str + str(new_node_name_counter)
+            new_node_name = node_name_prefix + new_node_name_base_str + str(new_node_name_counter)
             new_node_name_counter += 1
             nxg.add_node(new_node_name, feat=np.array(onehot_embedding))
-            nxg.add_edge(e[0], new_node_name, type=edge_types["normal-to-temp"])
-            nxg.add_edge(new_node_name, e[1], type=edge_types["temp-to-normal"])
+            nxg.add_edge(new_node_name, e[0], type=edge_types["temp-to-normal"])
+            nxg.add_edge(e[1], new_node_name, type=edge_types["normal-to-temp"])
 
-        return nxg, init_node
+        return nxg
 
     @ring.lru(maxsize=1000000)
-    def dfa_int2nxg(self, dfa_int):
+    def dfa_int2nxg(self, dfa_int, node_name_prefix):
         dfa = DFA.from_int(dfa_int, self.propositions)
         dfa_dict, init_state = dfa2dict(dfa)
-        init_node, accepting_states, nxg = self.dfa_dict2nxg(dfa_dict, init_state)
-        dfa_nxg, init_node = self._format(init_node, accepting_states, nxg)
-        return dfa_nxg, init_node
+        init_node, accepting_states, dfa_nxg = self.dfa_dict2nxg(dfa_dict, init_state, node_name_prefix)
+        nxg = self._format(init_node, accepting_states, dfa_nxg, node_name_prefix)
+        return nxg, init_node
 
 def draw(G, formula):
     from networkx.drawing.nx_agraph import graphviz_layout
