@@ -50,15 +50,21 @@ class DFASampler():
         raise NotImplemented
 
     def get_size_bound(self):
+        return self._get_size_bound()
+
+    def _get_size_bound(self):
         Q = self.get_n_states()
         F = self.get_n_accepting_states()
         E = self.get_n_alphabet()
         m = self.get_n_transitions()
 
+        if F > Q /2: F = Q - F
+
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
 
-        return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
+        bin_size = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
+        return len(str(2**bin_size - 1))
 
     def get_n_conjunctions(self):
         raise NotImplemented
@@ -243,7 +249,7 @@ class UniversalSampler(DFASampler):
         augmented_props.remove('white')
 
         self.enumerated_dfas = [DFA.from_int(dfa_int, inputs=augmented_props) for dfa_int in enumerated_dfas]
-        sizes = np.array([len(bin(dfa_int)) for dfa_int in enumerated_dfas])
+        sizes = np.array([len(str(dfa_int)) for dfa_int in enumerated_dfas])
         # print(np.average(sizes))
         self.weights = softmax(-sizes * temp)
 
@@ -287,9 +293,9 @@ class ListSampler(DFASampler):
 
         # self.enumerated_dfas = [DFA.from_int(dfa_int, inputs=propositions) for dfa_int in dfa_ints]
         empty_dfa = DFA(start=False, label=lambda _: False, transition=lambda *_: False, inputs={'red', 'yellow','blue', 'green'})
-        empty_size = len(bin(empty_dfa.to_int()))
-        self.max_size = max([len(bin(d)) for d in self.dfa_ints])
-        self.weights = [len(bin(d)) - empty_size for d in self.dfa_ints]
+        empty_size = len(str(empty_dfa.to_int()))
+        self.max_size = max([len(str(d)) for d in self.dfa_ints])
+        self.weights = [len(str(d)) - empty_size for d in self.dfa_ints]
 
     def sample_dfa_formula(self):
         # random_size = np.random.choice(self.sizes, p=self.weights)
@@ -549,7 +555,8 @@ class EventuallySampler(DFASampler):
         b_Q = math.ceil(math.log(Q, 2))
         b_E = math.ceil(math.log(E, 2))
 
-        return math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
+        bin_size = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
+        return len(str(2**bin_size - 1))
 
     def sample(self):
         return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions, 0.25)

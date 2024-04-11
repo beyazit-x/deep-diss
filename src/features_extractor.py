@@ -54,20 +54,21 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         dfa_builder = utils.DFABuilder(self.propositions, dfa_n_conjunctions=self.env.sampler.get_n_conjunctions(), dfa_n_disjunctions=self.env.sampler.get_n_disjunctions(), device=device)
         return np.array([[dfa_builder(text).to(device)] for text in texts])
 
-    def preprocess_obss(self, features, dfa_binary_seqs, device=None):
+    def preprocess_obss(self, features, dfa_int_seqs, device=None):
         return utils.DictList({
             "image": features,
-            "text":  self.preprocess_texts([seq for seq in dfa_binary_seqs], device=device)
+            "text":  self.preprocess_texts([seq for seq in dfa_int_seqs], device=device)
         })
 
-    def get_obs(self, features, dfa_binary_seqs, done=None, progression_info=None):
-        preprocessed_obss = self.preprocess_obss(features, dfa_binary_seqs, device=self.device)
+    def get_obs(self, features, dfa_int_seqs, done=None, progression_info=None):
+        preprocessed_obss = self.preprocess_obss(features, dfa_int_seqs, device=self.device)
         embedding = self.env_model(preprocessed_obss.image)
         embed_gnn = self.gnn(preprocessed_obss.text)
         embedding = torch.cat((embedding, embed_gnn), dim=1)
         return embedding
 
     def forward(self, observations) -> th.Tensor:
-        features, dfa_binary_seqs = observations["features"], observations["dfa"]
-        result = self.get_obs(features, dfa_binary_seqs)
+        features, dfa_int_seqs = observations["features"], observations["dfa"]
+        result = self.get_obs(features, dfa_int_seqs)
         return result
+

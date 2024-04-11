@@ -24,21 +24,21 @@ class DFABuilder(object):
     def __ring_key__(self):
         return "DFABuilder"
 
-    def __call__(self, dfa_binary_seq, library="dgl"):
-        return self._to_graph(dfa_binary_seq, library)
+    def __call__(self, dfa_int_seq, library="dgl"):
+        return self._to_graph(dfa_int_seq, library)
 
     @ring.lru(maxsize=1000000)
-    def _to_graph(self, dfa_binary_seq, library="dgl"):
-        l = dfa_binary_seq.shape[0]
-        dfa_goal_bin = dfa_binary_seq.reshape(self.dfa_n_conjunctions, self.dfa_n_disjunctions, l//(self.dfa_n_conjunctions*self.dfa_n_disjunctions))
+    def _to_graph(self, dfa_int_seq, library="dgl"):
+        l = dfa_int_seq.shape[0]
+        dfa_goal_int_seq = dfa_int_seq.reshape(self.dfa_n_conjunctions, self.dfa_n_disjunctions, l//(self.dfa_n_conjunctions*self.dfa_n_disjunctions))
         nxg_goal = []
         nxg_goal_or_nodes = []
-        for i, dfa_clause_bin in enumerate(dfa_goal_bin):
+        for i, dfa_clause_int_seq in enumerate(dfa_goal_int_seq):
             nxg_clause = []
             nxg_init_nodes = []
-            for j, dfa_bin in enumerate(dfa_clause_bin):
-                dfa_binary_str = "".join(str(int(i)) for i in dfa_bin.tolist())
-                dfa_int = int(dfa_binary_str, 2)
+            for j, dfa_int_seq in enumerate(dfa_clause_int_seq):
+                dfa_int_str = "".join(str(int(i)) for i in dfa_int_seq.tolist())
+                dfa_int = int(dfa_int_str)
                 if dfa_int > 0:
                     dfa = DFA.from_int(dfa_int, self.propositions)
                     nxg, init_node = self.dfa2nxg(dfa)
@@ -249,3 +249,4 @@ def draw(G, formula):
     labels = G.nodes
     nx.draw(G, pos, with_labels=True, arrows=True, node_shape='s', edgelist=list(nx.get_edge_attributes(G,'type')), node_size=500, node_color="white") #edge_color=edge_color
     plt.show()
+

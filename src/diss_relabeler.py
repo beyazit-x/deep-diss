@@ -133,7 +133,7 @@ class DissRelabeler():
 
             dfa_goal = init_dfa_goal
             try:
-                dfa_binary_seq = self.env._to_bin(dfa_goal)
+                dfa_binary_seq = self.env._to_int_seq(dfa_goal)
             except ValueError as e:
                 warnings.warn(f"Description size of the relabeled DFA is more that the upper bound. DFA: {dfa}; description size of the DFA: {binary_seq.shape[0]}, description size upper bound: {self.env.N}, error message: {e}")
 
@@ -150,7 +150,7 @@ class DissRelabeler():
                 dones[end_of_episode_ind][step_ind] = done
                 rewards[end_of_episode_ind][step_ind] = reward
 
-                dfa_binary_seq = self.env._to_bin(dfa_goal)
+                dfa_binary_seq = self.env._to_int_seq(dfa_goal)
                 next_dfas[end_of_episode_ind][step_ind] = dfa_binary_seq
 
                 if done: # It is guaranteed that the done signal will be 1 within the episode.
