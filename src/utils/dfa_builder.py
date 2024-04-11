@@ -45,7 +45,7 @@ class DFABuilder(object):
                     nxg_init_nodes.append(init_node)
 
             if nxg_clause != []:
-                composed_nxg_clause = nx.compose_all(nxg_clause)
+                composed_nxg_clause = nx.union_all(nxg_clause)
             else:
                 composed_nxg_clause = nx.DiGraph()
 
@@ -58,7 +58,7 @@ class DFABuilder(object):
             nxg_goal_or_nodes.append(or_node)
 
         if nxg_goal != []:
-            composed_nxg_goal = nx.compose_all(nxg_goal)
+            composed_nxg_goal = nx.union_all(nxg_goal)
         else:
             composed_nxg_goal = nx.DiGraph()
 
