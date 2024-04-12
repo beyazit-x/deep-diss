@@ -3,12 +3,8 @@ import ring
 import torch
 import numpy as np
 import networkx as nx
-from dfa import DFA, dfa2dict
+from dfa import DFA
 from utils.parameters import FEATURE_SIZE, edge_types
-from copy import deepcopy
-from pysat.solvers import Solver
-
-DGL5_COMPAT = True
 
 feature_inds = {"rejecting": -1, "accepting": -2, "temp": -3, "normal": -4, "init": -5, "AND": -6, "OR": -7}
 
@@ -103,157 +99,44 @@ class DFABuilder(object):
 
         return g
 
-    def _get_guard_embeddings(self, guard):
-        embeddings = []
-        try:
-            guard = guard.replace(" ", "").replace("(", "").replace(")", "").replace("\"", "")
-        except:
-            return embeddings
-
-        if (guard == "true"):
-            return embeddings
-
-        if "&" in guard and "|" not in guard:
-            embedding = [0.0] * FEATURE_SIZE
-            guard = guard.split("&")
-            for atom in guard:
-                embedding[self.propositions.index(atom)] = 1.0
-            embeddings.append(embedding)
-            return embeddings
-        elif "&" not in guard and "|" in guard:
-            guard = guard.split("|")
-            for atom in guard:
-                embedding = [0.0] * FEATURE_SIZE
-                embedding[self.propositions.index(atom)] = 1.0
-                embeddings.append(embedding)
-            return embeddings
-        elif "&" not in guard and "|" not in guard:
-            atom = guard
-            embedding = [0.0] * FEATURE_SIZE
-            embedding[self.propositions.index(atom)] = 1.0
-            embeddings.append(embedding)
-            return embeddings
-        else:
-            guard = guard.split("&")
-            cnf = []
-            seen_atoms = []
-            for c in guard:
-                atoms = c.split("|")
-                clause = []
-                for atom in atoms:
-                    try:
-                        index = seen_atoms.index(atom if atom[0] != "~" else atom[1:])
-                    except:
-                        index = len(seen_atoms)
-                        seen_atoms.append(atom if atom[0] != "~" else atom[1:])
-                    clause.append(index + 1 if atom[0] != "~" else -(index + 1))
-                cnf.append(clause)
-            models = []
-            with Solver(bootstrap_with=cnf) as s:
-                models = list(s.enum_models())
-            if len(models) == 0:
-                return embeddings
-            for model in models:
-                temp = [0.0] * FEATURE_SIZE
-                for a in model:
-                    if a > 0:
-                        atom = seen_atoms[abs(a) - 1]
-                        temp[self.propositions.index(atom)] = 1.0
-                embeddings.append(temp)
-            return embeddings
-
-    def _get_onehot_guard_embeddings(self, guard):
-        is_there_onehot = False
-        is_there_all_zero = False
-        onehot_embedding = [0.0] * FEATURE_SIZE
-        onehot_embedding[feature_inds["temp"]] = 1.0 # Since it will be a temp node
-        full_embeddings = self._get_guard_embeddings(guard)
-        for embed in full_embeddings:
-            # discard all non-onehot embeddings (a one-hot embedding must contain only a single 1)
-            if embed.count(1.0) == 1:
-                # clean the embedding so that it's one-hot
-                is_there_onehot = True
-                var_idx = embed.index(1.0)
-                onehot_embedding[var_idx] = 1.0
-            elif embed.count(0.0) == len(embed):
-                is_there_all_zero = True
-        if is_there_onehot or is_there_all_zero:
-            return [onehot_embedding]
-        else:
-            return []
-
-    def _is_sink_state(self, node, nxg):
-        for edge in nxg.edges:
-            if node == edge[0] and node != edge[1]: # If there is an outgoing edge to another node, then it is not an accepting state
-                return False
-        return True
-
-    def dfa_dict2nxg(self, dfa_dict, init_node, node_name_prefix):
-
-        init_node = node_name_prefix + str(init_node)
+    def dfa_to_formatted_nxg(self, dfa, node_name_prefix):
 
         nxg = nx.DiGraph()
+        new_node_name_counter = 0
+        new_node_name_base_str = "temp_"
 
-        accepting_states = []
-        for start, (accepting, transitions) in dfa_dict.items():
-            start = node_name_prefix + str(start)
+        for s in dfa.states():
+            start = node_name_prefix + str(s)
             nxg.add_node(start)
-            if accepting:
-                accepting_states.append(start)
-            for action, end in transitions.items():
-                end = node_name_prefix + str(end)
-                if nxg.has_edge(start, end):
-                    existing_label = nxg.get_edge_data(start, end)['label']
-                    nxg.add_edge(start, end, label='{} | {}'.format(existing_label, action))
-                else:
-                    nxg.add_edge(start, end, label=action)
+            nxg.nodes[start]["feat"] = np.array([[0.0] * FEATURE_SIZE])
+            nxg.nodes[start]["feat"][0][feature_inds["normal"]] = 1.0
+            if dfa._label(s): # is accepting?
+                nxg.nodes[start]["feat"][0][feature_inds["accepting"]] = 1.0
+            elif sum(s != dfa._transition(s, a) for a in dfa.inputs) == 0: # is rejecting?
+                nxg.nodes[start]["feat"][0][feature_inds["rejecting"]] = 1.0
+            for a in dfa.inputs:
+                e = dfa._transition(s, a)
+                if s == e:
+                    continue # We define self loops later when composing graphs
+                end = node_name_prefix + str(e)
+                embedding = np.zeros(FEATURE_SIZE)
+                embedding[feature_inds["temp"]] = 1.0 # Since it is a temp node
+                embedding[self.propositions.index(a)] = 1.0 # TODO: Consider merging embeddings
+                new_node_name = node_name_prefix + new_node_name_base_str + str(new_node_name_counter)
+                new_node_name_counter += 1
+                nxg.add_node(new_node_name, feat=np.array(np.array([embedding])))
+                nxg.add_edge(new_node_name, start, type=edge_types["temp-to-normal"])
+                nxg.add_edge(end, new_node_name, type=edge_types["normal-to-temp"])
 
-        return init_node, accepting_states, nxg
-
-
-    def _format(self, init_node, accepting_states, nxg, node_name_prefix):
-        rejecting_states = []
-        for node in nxg.nodes:
-            if self._is_sink_state(node, nxg) and node not in accepting_states:
-                rejecting_states.append(node)
-
-        for node in nxg.nodes:
-            nxg.nodes[node]["feat"] = np.array([[0.0] * FEATURE_SIZE])
-            nxg.nodes[node]["feat"][0][feature_inds["normal"]] = 1.0
-            if node in accepting_states:
-                nxg.nodes[node]["feat"][0][feature_inds["accepting"]] = 1.0
-            if node in rejecting_states:
-                nxg.nodes[node]["feat"][0][feature_inds["rejecting"]] = 1.0
-
+        init_node = node_name_prefix + str(dfa.start)
         nxg.nodes[init_node]["feat"][0][feature_inds["init"]] = 1.0
 
-        edges = deepcopy(nxg.edges)
-
-        new_node_name_base_str = "temp_"
-        new_node_name_counter = 0
-
-        for e in edges:
-            guard = nxg.edges[e]["label"]
-            nxg.remove_edge(*e)
-            if e[0] == e[1]:
-                continue # We define self loops later when composing graphs
-            onehot_embedding = self._get_onehot_guard_embeddings(guard)
-            if len(onehot_embedding) == 0:
-                continue
-            new_node_name = node_name_prefix + new_node_name_base_str + str(new_node_name_counter)
-            new_node_name_counter += 1
-            nxg.add_node(new_node_name, feat=np.array(onehot_embedding))
-            nxg.add_edge(new_node_name, e[0], type=edge_types["temp-to-normal"])
-            nxg.add_edge(e[1], new_node_name, type=edge_types["normal-to-temp"])
-
-        return nxg
+        return nxg, init_node
 
     @ring.lru(maxsize=1000000)
     def dfa_int2nxg(self, dfa_int, node_name_prefix):
         dfa = DFA.from_int(dfa_int, self.propositions)
-        dfa_dict, init_state = dfa2dict(dfa)
-        init_node, accepting_states, dfa_nxg = self.dfa_dict2nxg(dfa_dict, init_state, node_name_prefix)
-        nxg = self._format(init_node, accepting_states, dfa_nxg, node_name_prefix)
+        nxg, init_node = self.dfa_to_formatted_nxg(dfa, node_name_prefix)
         return nxg, init_node
 
 def draw(G, formula):
