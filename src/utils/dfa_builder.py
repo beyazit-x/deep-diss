@@ -42,16 +42,13 @@ class DFABuilder(object):
 
             if nxg_clause != []:
                 composed_nxg_clause = nx.union_all(nxg_clause)
-            else:
-                composed_nxg_clause = nx.DiGraph()
-
-            or_node = str(i) + "_OR"
-            composed_nxg_clause.add_node(or_node, feat=np.array([[0.0] * FEATURE_SIZE]))
-            composed_nxg_clause.nodes[or_node]["feat"][0][feature_inds["OR"]] = 1.0
-            for nxg_init_node in nxg_init_nodes:
-                composed_nxg_clause.add_edge(nxg_init_node, or_node, type=edge_types["OR"])
-            nxg_goal.append(composed_nxg_clause)
-            nxg_goal_or_nodes.append(or_node)
+                or_node = str(i) + "_OR"
+                composed_nxg_clause.add_node(or_node, feat=np.array([[0.0] * FEATURE_SIZE]))
+                composed_nxg_clause.nodes[or_node]["feat"][0][feature_inds["OR"]] = 1.0
+                for nxg_init_node in nxg_init_nodes:
+                    composed_nxg_clause.add_edge(nxg_init_node, or_node, type=edge_types["OR"])
+                nxg_goal.append(composed_nxg_clause)
+                nxg_goal_or_nodes.append(or_node)
 
         if nxg_goal != []:
             composed_nxg_goal = nx.union_all(nxg_goal)
@@ -114,17 +111,20 @@ class DFABuilder(object):
                 nxg.nodes[start]["feat"][0][feature_inds["accepting"]] = 1.0
             elif sum(s != dfa._transition(s, a) for a in dfa.inputs) == 0: # is rejecting?
                 nxg.nodes[start]["feat"][0][feature_inds["rejecting"]] = 1.0
+            embeddings = {}
             for a in dfa.inputs:
                 e = dfa._transition(s, a)
                 if s == e:
                     continue # We define self loops later when composing graphs
                 end = node_name_prefix + str(e)
-                embedding = np.zeros(FEATURE_SIZE)
-                embedding[feature_inds["temp"]] = 1.0 # Since it is a temp node
-                embedding[self.propositions.index(a)] = 1.0 # TODO: Consider merging embeddings
+                if end not in embeddings.keys():
+                    embeddings[end] = np.zeros(FEATURE_SIZE)
+                    embeddings[end][feature_inds["temp"]] = 1.0 # Since it is a temp node
+                embeddings[end][self.propositions.index(a)] = 1.0
+            for end in embeddings.keys():
                 new_node_name = node_name_prefix + new_node_name_base_str + str(new_node_name_counter)
                 new_node_name_counter += 1
-                nxg.add_node(new_node_name, feat=np.array(np.array([embedding])))
+                nxg.add_node(new_node_name, feat=np.array(np.array([embeddings[end]])))
                 nxg.add_edge(new_node_name, start, type=edge_types["temp-to-normal"])
                 nxg.add_edge(end, new_node_name, type=edge_types["normal-to-temp"])
 
