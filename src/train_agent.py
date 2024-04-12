@@ -174,7 +174,7 @@ async def learn_with_diss_async(
 
     while model.num_timesteps < total_timesteps:
 
-        task1 = asyncio.create_task(learn(model, total_timesteps=10000000, callback=callback))
+        task1 = asyncio.create_task(learn(model, total_timesteps=total_timesteps, callback=callback))
         task2 = None
         if model.num_timesteps > model.learning_starts:
             task2 = asyncio.create_task(relabel(relabeler, relabeler_name, 2))
@@ -397,7 +397,7 @@ if __name__ == "__main__":
         # with open(f"{MODEL_PATH}_{file_index}.pkl", 'wb') as dump_f:
         #     dill.dump(model, dump_f)
         # model.save(f"{MODEL_PATH}.pkl", include=[])
-        model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
+        # model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
     else:
         if args.enforce_clause == "chain":
             extra_clauses = enforce_chain

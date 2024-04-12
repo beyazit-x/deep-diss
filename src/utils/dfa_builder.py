@@ -125,9 +125,9 @@ class DFABuilder(object):
             for end in embeddings.keys():
                 new_node_name = new_node_name_base_str + str(new_node_name_counter)
                 new_node_name_counter += 1
-                nxg.add_node(new_node_name, feat=np.array(np.array([embeddings[end]])))
-                nxg.add_edge(new_node_name, start, type=edge_types["temp-to-normal"])
+                nxg.add_node(new_node_name, feat=np.array([embeddings[end]]))
                 nxg.add_edge(end, new_node_name, type=edge_types["normal-to-temp"])
+                nxg.add_edge(new_node_name, start, type=edge_types["temp-to-normal"])
 
         init_node = str(dfa.start)
         nxg.nodes[init_node]["feat"][0][feature_inds["init"]] = 1.0
