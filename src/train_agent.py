@@ -8,7 +8,7 @@ from stable_baselines3 import DQN, SAC
 from softDQN import SoftDQN
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_checker import check_env
-from feature_extractor import CustomCombinedExtractor
+from features_extractor import CustomCombinedExtractor
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, ProgressBarCallback, CheckpointCallback
 
@@ -25,8 +25,6 @@ from collections import deque
 
 from dfa_identify.concept_class_restrictions import enforce_chain, enforce_reach_avoid_seq
 
-import wandb
-from wandb.integration.sb3 import WandbCallback
 
 from utils.parameters import GNN_EMBEDDING_SIZE
 
@@ -174,7 +172,7 @@ async def learn_with_diss_async(
 
     while model.num_timesteps < total_timesteps:
 
-        task1 = asyncio.create_task(learn(model, total_timesteps=10000000, callback=callback))
+        task1 = asyncio.create_task(learn(model, total_timesteps=total_timesteps, callback=callback))
         task2 = None
         if model.num_timesteps > model.learning_starts:
             task2 = asyncio.create_task(relabel(relabeler, relabeler_name, 2))
@@ -272,8 +270,8 @@ if __name__ == "__main__":
                             help="fraction of entire training period over which the exploration rate is reduced")
     parser.add_argument("--batch-size", type=int, default=8,
                             help="buffer size")
-    parser.add_argument("--reject-reward", type=int, default=0,
-                            help="how much reward should we give in non-accepting sink states? A form of reward shaping")
+    parser.add_argument("--reject-reward", type=int, default=-1,
+                            help="default is -1")
     parser.add_argument("--save-gnn-path", default=None,
                             help="save the gnn model to a path after training")
     parser.add_argument("--load-gnn-path", default=None,
@@ -286,19 +284,12 @@ if __name__ == "__main__":
                             help="checkpointing during training (default: False)")
     parser.add_argument("--policy", default="SDQN",
                             help="SAC | SDQN (default)")
+    parser.add_argument("--disable-wandb", action=argparse.BooleanOptionalAction, default=False,
+                            help="disable wandb logging (default: False)")
+
 
     args = parser.parse_args()
 
-    # setup wandb
-
-    run = wandb.init(
-	config=args,
-	sync_tensorboard=True,  # automatically upload SB3's tensorboard metrics to W&B
-        entity='nlauffer',
-	project="deep-diss",
-	monitor_gym=True,       # automatically upload gym environements' videos
-	save_code=False,
-    )
 
     env = make_env(args.env, args.sampler, args.reject_reward, seed=args.seed)
     # single_env = env
@@ -312,33 +303,52 @@ if __name__ == "__main__":
     # check_env(env)
     print("------------------------------------------------")
 
+    callback_list = []
 
-    wandb_callback=WandbCallback(
-        gradient_save_freq=0,
-        # model_save_path=f"models/{run.id}",
-        verbose=2,
+    # setup wandb
+    if not args.disable_wandb:
+
+        import wandb
+        from wandb.integration.sb3 import WandbCallback
+
+        run = wandb.init(
+            config=args,
+            sync_tensorboard=True,  # automatically upload SB3's tensorboard metrics to W&B
+            entity='nlauffer',
+            project="deep-diss",
+            monitor_gym=True,       # automatically upload gym environements' videos
+            save_code=False,
         )
 
-    discounted_reward_callback = DiscountedRewardCallback(args.gamma)
+        wandb_callback=WandbCallback(
+            gradient_save_freq=0,
+            verbose=2,
+        )
 
-    checkpoint_callback = CheckpointCallback(
-        save_freq=25000,
-        save_path=wandb.run.dir,
-        name_prefix="checkpoint",
-        save_replay_buffer=False,
-        save_vecnormalize=False,
-    )
+        wandb.save(os.path.join(wandb.run.dir, "checkpoint*"))
 
-    wandb.save(os.path.join(wandb.run.dir, "checkpoint*"))
+        callback_list.append(wandb_callback)
+        
+        model_save_path = wandb.run.dir
+    else:
+        model_save_path = "./logs"
 
-    callback_list = [discounted_reward_callback, wandb_callback, checkpoint_callback]
     if args.mid_check:
+        checkpoint_callback = CheckpointCallback(
+            save_freq=25000,
+            save_path=model_save_path,
+            name_prefix="checkpoint",
+            save_replay_buffer=False,
+            save_vecnormalize=False,
+        )
         callback_list.append(checkpoint_callback)
+
+    discounted_reward_callback = DiscountedRewardCallback(args.gamma)
+    callback_list.append(discounted_reward_callback)
 
     tensorboard_dir = "./wandb_sweep_relabel_" + args.relabeler
 
-    obs_space = {"image": env.observation_space['features'].shape, "text": env.observation_space['dfa'].n}
-    env_model = getEnvModel(env, obs_space)
+    env_model = getEnvModel(env, env.observation_space['features'].shape)
     features_dim = env_model.embedding_size + GNN_EMBEDDING_SIZE
 
     policy = None
@@ -402,10 +412,9 @@ if __name__ == "__main__":
             learn_with_diss(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses)
 
     MODEL_PATH = "checkpoint_final"
-    model.save(os.path.join(wandb.run.dir, "f{MODEL_PATH}.pkl"), include=[])
+    model.save(os.path.join(model_save_path, "f{MODEL_PATH}.pkl"), include=[])
     if args.save_gnn_path is not None:
         torch.save(model.policy.q_net.features_extractor.gnn, f"{args.save_gnn_path}")
-
 
     run.finish()
 
