@@ -11,7 +11,7 @@ import funcy as fn
 
 class DummyEnv(gym.Env):
 
-    def __init__(self, propositions):
+    def __init__(self, propositions, timeout):
         """
             argument:
                 -description
@@ -25,7 +25,7 @@ class DummyEnv(gym.Env):
         self.observation_space = gym.spaces.Discrete(len(self.props)+1)
         self.action_space = gym.spaces.Discrete(len(self.props))
         self.actions = list(self.props)
-        self.timeout = 10
+        self.timeout = timeout
         self.time = 0
         self.num_episodes = 0
 
@@ -78,6 +78,6 @@ class DummyEnv(gym.Env):
 
 class DFADummyEnv(DummyEnv):
     def __init__(self):
-        super().__init__(propositions=['a','b','c','d','e','f','g','h','i','j','k','l'])
+        super().__init__(propositions=['a','b','c','d','e','f','g','h','i','j','k','l'], timeout=20)
 
 
