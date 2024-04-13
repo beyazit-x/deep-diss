@@ -144,13 +144,13 @@ def draw(G, formula):
     from networkx.drawing.nx_agraph import graphviz_layout
     import matplotlib.pyplot as plt
 
-    # colors = ["black", "red"]
-    # edge_color = [colors[i] for i in nx.get_edge_attributes(G,'type').values()]
+    colors = ["black", "red", "green", "blue", "purple", "orange"]
+    edge_color = [colors[i] for i in nx.get_edge_attributes(G,'type').values()]
 
     plt.title(formula)
     pos=graphviz_layout(G, prog='dot')
     # labels = nx.get_node_attributes(G,'token')
     labels = G.nodes
-    nx.draw(G, pos, with_labels=True, arrows=True, node_shape='s', edgelist=list(nx.get_edge_attributes(G,'type')), node_size=500, node_color="white") #edge_color=edge_color
+    nx.draw(G, pos, with_labels=True, arrows=True, node_shape='s', edgelist=list(nx.get_edge_attributes(G,'type')), node_size=500, node_color="white", edge_color=edge_color) #edge_color=edge_color
     plt.show()
 

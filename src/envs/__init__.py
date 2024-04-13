@@ -93,11 +93,11 @@ register(
     entry_point='envs.gym_letters.letter_env:LetterEnvAgentCentricFixedMapMid7x7'
 )
 
-# ### Minigrid Envs
-# register(
-#     id='Adversarial-v0',
-#     entry_point='envs.minigrid.minigrid_env:AdversarialMinigridEnv'
-# )
+### Minigrid Envs
+register(
+    id='Adversarial-v0',
+    entry_point='envs.minigrid.minigrid_env:AdversarialMinigridEnv'
+)
 
 ### Safety Envs
 register(

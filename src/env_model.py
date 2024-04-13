@@ -103,9 +103,15 @@ class LetterEnvModel(EnvModel):
 class MinigridEnvModel(EnvModel):
     def __init__(self, obs_space):
         super().__init__(obs_space)
-        n = obs_space[0]
-        m = obs_space[1]
-        k = obs_space[2]
+        # We need the following because Minigrid is wrapped in VecTransposeImage
+        h_1, w_1, c_1 = obs_space # HxWxC format
+        c_2, h_2, w_2 = obs_space # CxHxW format
+        if c_1 > c_2:
+            n, m, k = h_2, w_2, c_2
+            self.transpose_needed = False
+        else:
+            n, m, k = h_1, w_1, c_1
+            self.transpose_needed = True
         self.image_conv = nn.Sequential(
             nn.Conv2d(k, 16, (2, 2)),
             nn.ReLU(),
@@ -118,7 +124,9 @@ class MinigridEnvModel(EnvModel):
         self.embedding_size = ((n-1)//2-2)*((m-1)//2-2)*64
 
     def forward(self, obs):
-        x = obs.transpose(1, 3).transpose(2, 3)
+        x = obs
+        if self.transpose_needed:
+            x = x.transpose(1, 3).transpose(2, 3)
         x = self.image_conv(x)
         x = x.reshape(x.shape[0], -1)
         return x

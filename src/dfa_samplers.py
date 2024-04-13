@@ -633,12 +633,12 @@ class AdversarialEnvSampler(DFASampler):
                 elif s == 1 and c == 'b':
                     return 2
                 return s
-            return DFA(
+            return ((DFA(
                 start=0,
                 inputs=self.propositions,
                 label=lambda s: s == 2,
                 transition=delta,
-            )
+            ),),)
         else:
             def delta(s, c):
                 if s == 0 and c == 'a':
@@ -646,12 +646,30 @@ class AdversarialEnvSampler(DFASampler):
                 elif s == 1 and c == 'c':
                     return 2
                 return s
-            return DFA(
+            return ((DFA(
                 start=0,
                 inputs=self.propositions,
                 label=lambda s: s == 2,
                 transition=delta,
-            )
+            ),),)
+
+    def get_n_alphabet(self):
+        return len(self.propositions)
+
+    def get_n_states(self):
+        return 3
+
+    def get_n_accepting_states(self):
+        return 1
+
+    def get_n_transitions(self):
+        return 2
+
+    def get_n_conjunctions(self):
+        return 1
+
+    def get_n_disjunctions(self):
+        return 1
 
 def getRegisteredSamplers(propositions):
     return [SequenceSampler(propositions),
