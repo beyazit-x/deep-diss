@@ -266,8 +266,8 @@ if __name__ == "__main__":
                             help="how many samples to collect before doing gradient updates")
     parser.add_argument("--total-timesteps", type=int, default=1000000,
                             help="how many timesteps to train for")
-    parser.add_argument("--exploration-fraction", type=float, default=0.1,
-                            help="fraction of entire training period over which the exploration rate is reduced")
+    # parser.add_argument("--exploration-fraction", type=float, default=0.1,
+    #                         help="fraction of entire training period over which the exploration rate is reduced")
     parser.add_argument("--batch-size", type=int, default=8,
                             help="buffer size")
     parser.add_argument("--reject-reward", type=int, default=-1,
@@ -375,7 +375,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             gamma=args.gamma,
             buffer_size=args.buffer_size,
-            exploration_fraction=args.exploration_fraction
+            # exploration_fraction=args.exploration_fraction
             )
         model.learn(total_timesteps=args.total_timesteps, callback=callback_list)
     else:
@@ -404,7 +404,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             gamma=args.gamma,
             tensorboard_log=tensorboard_dir,
-            exploration_fraction=args.exploration_fraction
+            # exploration_fraction=args.exploration_fraction
             )
         if args.async_diss:
             asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses))
