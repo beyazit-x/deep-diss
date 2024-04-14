@@ -64,7 +64,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         preprocessed_obss = self.preprocess_obss(features, dfa_int_seqs, device=self.device)
         embedding = self.env_model(preprocessed_obss.image)
         embed_gnn = self.gnn(preprocessed_obss.text)
-        embedding = torch.cat((embedding, embed_gnn), dim=1)
+        embedding = torch.cat((embedding, embed_gnn), dim=1) if embedding is not None else embed_gnn
         return embedding
 
     def forward(self, observations) -> th.Tensor:

@@ -154,12 +154,11 @@ class DFAEnv(gym.Wrapper):
         return np.pad(int_seq, (self.per_dfa_int_seq_size - int_seq.shape[0], 0), "constant", constant_values=(0, 0))
 
     def get_dfa_from_int_seq(self, dfa_int_seq):
-        dfa_int_str = "".join(str(i) for i in dfa_int_seq.squeeze().tolist())
+        dfa_int_str = "".join(str(int(i)) for i in dfa_int_seq.squeeze().tolist())
         dfa_int = int(dfa_int_str)
         dfa = DFA.from_int(dfa_int, self.propositions)
         return dfa
 
     def _from_int_seq(self, dfa_int_seq):
-        dfa_int_seq.reshape(self.dfa_n_conjunctions, self.dfa_n_disjunctions, self.per_dfa_int_seq_size)
-        return tuple(tuple(get_dfa_from_int_seq(dfa_int_seq) for dfa_int_seq in dfa_clause_int_seq) for dfa_clause_int_seq in dfa_int_seq)
+        return tuple(tuple(self.get_dfa_from_int_seq(dfa_int_seq) for dfa_int_seq in dfa_clause_int_seq) for dfa_clause_int_seq in dfa_int_seq.view(self.dfa_n_conjunctions, self.dfa_n_disjunctions, self.per_dfa_int_seq_size))
 
