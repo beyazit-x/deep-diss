@@ -4,9 +4,7 @@ import torch
 import numpy as np
 import networkx as nx
 from dfa import DFA
-from utils.parameters import FEATURE_SIZE, edge_types
-
-feature_inds = {"rejecting": -1, "accepting": -2, "temp": -3, "normal": -4, "init": -5, "AND": -6, "OR": -7}
+from utils.parameters import edge_types, feature_inds
 
 class DFABuilder(object):
     def __init__(self, propositions, dfa_n_conjunctions, dfa_n_disjunctions, device=None):
@@ -15,6 +13,7 @@ class DFABuilder(object):
         self.device = device
         self.dfa_n_conjunctions = dfa_n_conjunctions
         self.dfa_n_disjunctions = dfa_n_disjunctions
+        self.feature_size = len(self.propositions) + len(feature_inds)
 
     # To make the caching work.
     def __ring_key__(self):
@@ -23,7 +22,6 @@ class DFABuilder(object):
     def __call__(self, dfa_int_seq):
         return self._to_graph(dfa_int_seq)
 
-    @ring.lru(maxsize=1000000)
     def _to_graph(self, dfa_int_seq):
         l = dfa_int_seq.shape[0]
         dfa_goal_int_seq = dfa_int_seq.reshape(self.dfa_n_conjunctions, self.dfa_n_disjunctions, l//(self.dfa_n_conjunctions*self.dfa_n_disjunctions))
@@ -37,6 +35,7 @@ class DFABuilder(object):
             for j, dfa_int_seq in enumerate(dfa_clause_int_seq):
                 dfa_int_str = "".join(str(int(i)) for i in dfa_int_seq.tolist())
                 dfa_int = int(dfa_int_str)
+                # dfa_int = int(dfa_int_str, 2)
                 if dfa_int > 0:
                     nxg, init_node = self.dfa_int2nxg(dfa_int)
                     nxg_clause.append(nxg)
@@ -46,7 +45,7 @@ class DFABuilder(object):
             if nxg_clause != []:
                 composed_nxg_clause = nx.union_all(nxg_clause, rename=rename_clause)
                 or_node = "OR"
-                composed_nxg_clause.add_node(or_node, feat=np.array([[0.0] * FEATURE_SIZE]))
+                composed_nxg_clause.add_node(or_node, feat=np.array([[0.0] * self.feature_size]))
                 composed_nxg_clause.nodes[or_node]["feat"][0][feature_inds["OR"]] = 1.0
                 for nxg_init_node in nxg_init_nodes:
                     composed_nxg_clause.add_edge(nxg_init_node, or_node, type=edge_types["OR"])
@@ -60,7 +59,7 @@ class DFABuilder(object):
             composed_nxg_goal = nx.DiGraph()
 
         and_node = "AND"
-        composed_nxg_goal.add_node(and_node, feat=np.array([[0.0] * FEATURE_SIZE]))
+        composed_nxg_goal.add_node(and_node, feat=np.array([[0.0] * self.feature_size]))
         nx.set_node_attributes(composed_nxg_goal, np.array([0.0]), "is_root")
         composed_nxg_goal.nodes[and_node]["is_root"] = np.array([1.0])
         composed_nxg_goal.nodes[and_node]["feat"][0][feature_inds["AND"]] = 1.0
@@ -106,7 +105,7 @@ class DFABuilder(object):
         for s in dfa.states():
             start = str(s)
             nxg.add_node(start)
-            nxg.nodes[start]["feat"] = np.array([[0.0] * FEATURE_SIZE])
+            nxg.nodes[start]["feat"] = np.array([[0.0] * self.feature_size])
             nxg.nodes[start]["feat"][0][feature_inds["normal"]] = 1.0
             if dfa._label(s): # is accepting?
                 nxg.nodes[start]["feat"][0][feature_inds["accepting"]] = 1.0
@@ -119,7 +118,7 @@ class DFABuilder(object):
                     continue # We define self loops later when composing graphs
                 end = str(e)
                 if end not in embeddings.keys():
-                    embeddings[end] = np.zeros(FEATURE_SIZE)
+                    embeddings[end] = np.zeros(self.feature_size)
                     embeddings[end][feature_inds["temp"]] = 1.0 # Since it is a temp node
                 embeddings[end][self.propositions.index(a)] = 1.0
             for end in embeddings.keys():
@@ -134,7 +133,7 @@ class DFABuilder(object):
 
         return nxg, init_node
 
-    @ring.lru(maxsize=1000000)
+    @ring.lru(maxsize=100000)
     def dfa_int2nxg(self, dfa_int):
         dfa = DFA.from_int(dfa_int, self.propositions)
         nxg, init_node = self.dfa_to_formatted_nxg(dfa)

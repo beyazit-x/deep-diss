@@ -1,34 +1,25 @@
 #!/usr/bin/python3
 import os
-import dill
+import torch
+import random
 import asyncio
 import argparse
 from utils import make_env
 from stable_baselines3 import DQN, SAC
 from softDQN import SoftDQN
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_checker import check_env
 from features_extractor import CustomCombinedExtractor
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, ProgressBarCallback, CheckpointCallback
-
-from stable_baselines3.common.type_aliases import MaybeCallback
-
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
-from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn, Schedule, TrainFreq, TrainFrequencyUnit
-
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback
+from typing import Optional
 from diss_relabeler import DissRelabeler
 from diss_replay_buffer import DissReplayBuffer
 from env_model import getEnvModel
-
 from collections import deque
-
 from dfa_identify.concept_class_restrictions import enforce_chain, enforce_reach_avoid_seq
-
-
 from utils.parameters import GNN_EMBEDDING_SIZE
 
-import torch
 torch.set_num_threads(1)
 
 class OverwriteCheckpointCallback(CheckpointCallback):
@@ -253,11 +244,11 @@ if __name__ == "__main__":
     parser.add_argument("--env", required=True,
                             help="name of the environment to train on (REQUIRED)")
     parser.add_argument("--sampler", default="Default",
-                        help="the ltl formula template to sample from (default: DefaultSampler)")
+                        help="the dfa template to sample from (default: DefaultSampler)")
     parser.add_argument("--relabeler", default="none",
                         help="baseline | diss | none (default)")
-    parser.add_argument("--seed", type=int, default=1,
-                            help="random seed (default: 1)")
+    parser.add_argument("--seed", type=int, default=None,
+                            help="random seed (default: None)")
     parser.add_argument("--gamma", type=float, default=0.99,
                             help="discount factor (default: 0.99)")
     parser.add_argument("--buffer-size", type=int, default=50000,
@@ -289,6 +280,8 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
+
+    random.seed(args.seed)
 
 
     env = make_env(args.env, args.sampler, args.reject_reward, seed=args.seed)
@@ -377,6 +370,9 @@ if __name__ == "__main__":
             buffer_size=args.buffer_size,
             exploration_fraction=args.exploration_fraction
             )
+        pytorch_total_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
+        print(pytorch_total_params)
+        print(model.policy)
         model.learn(total_timesteps=args.total_timesteps, callback=callback_list)
     else:
         if args.enforce_clause == "chain":
@@ -406,6 +402,9 @@ if __name__ == "__main__":
             tensorboard_log=tensorboard_dir,
             exploration_fraction=args.exploration_fraction
             )
+        pytorch_total_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
+        print(pytorch_total_params)
+        print(model.policy)
         if args.async_diss:
             asyncio.run(learn_with_diss_async(model, env, args.relabeler, "dqn", callback=callback_list, total_timesteps=args.total_timesteps, extra_clauses=extra_clauses))
         else:

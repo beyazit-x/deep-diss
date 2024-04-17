@@ -22,8 +22,6 @@ from pythomata.impl.simple import SimpleNFA as NFA
 from scipy.special import softmax
 from dfa import DFA, dfa2dict
 
-from utils.parameters import TIMEOUT_SECONDS, FEATURE_SIZE
-
 class TimeOutException(Exception):
     pass
 
@@ -65,6 +63,7 @@ class DFASampler():
 
         bin_size = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
         return len(str(2**bin_size - 1))
+        # return bin_size
 
     def get_n_conjunctions(self):
         raise NotImplemented
@@ -557,6 +556,7 @@ class EventuallySampler(DFASampler):
 
         bin_size = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
         return len(str(2**bin_size - 1))
+        # return bin_size
 
     def sample(self):
         return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions, 0.25)

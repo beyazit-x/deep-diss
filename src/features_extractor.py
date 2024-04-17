@@ -7,7 +7,6 @@ from torch import nn
 import networkx as nx
 from env_model import getEnvModel
 from gnns.graphs.GNN import GNNMaker
-from utils.parameters import FEATURE_SIZE
 from dfa import DFA
 from dfa.utils import dfa2dict
 
@@ -26,11 +25,10 @@ from pysat.solvers import Solver
 from pythomata.impl.simple import SimpleNFA as NFA 
 from scipy.special import softmax
 import dfa
-
-from utils.parameters import FEATURE_SIZE
 ########################################################################
 
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from utils.parameters import feature_inds
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: gym.spaces.Dict, env, gnn_load_path, features_dim):
@@ -42,7 +40,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         self.text_embedding_size = 32
         if gnn_load_path is None:
             # TODO: Make GNN architecture a parameter
-            self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", max(FEATURE_SIZE, len(self.propositions) + 10), self.text_embedding_size)
+            self.gnn = GNNMaker("RGCN_8x32_ROOT_SHARED", len(self.propositions) + len(feature_inds), self.text_embedding_size)
         else:
             self.gnn = torch.load(gnn_load_path)
 
