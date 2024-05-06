@@ -272,19 +272,22 @@ class CompositionalUntilTaskSampler(DFASampler):
         return self.n_alphabet
 
     def get_n_states(self):
-        return self.n_states*self.max_conjunctions
+        return self.n_states
 
     def get_n_accepting_states(self):
-        return self.n_accepting_states*self.max_conjunctions
+        return self.n_accepting_states
 
     def get_n_transitions(self):
-        return self.n_transitions*self.max_conjunctions
+        return self.n_transitions
 
     def get_n_conjunctions(self):
         return self.max_conjunctions
 
     def get_n_disjunctions(self):
         return 1
+
+    def get_size_bound(self):
+        return self._get_size_bound()*self.max_conjunctions
 
 def _chain(xs, alphabet):
     def transition(s, c):
@@ -845,6 +848,163 @@ class AdversarialEnvSampler(DFASampler):
     def get_n_disjunctions(self):
         return 1
 
+class ParitySampler(DFASampler):
+    def __init__(self, propositions, min_levels=1, max_levels=2, min_conjunctions=1 , max_conjunctions=2):
+        super().__init__(propositions)
+        self.levels       = (int(min_levels), int(max_levels))
+        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
+        assert 3*int(max_levels)*int(max_conjunctions) <= len(propositions), "The domain does not have enough propositions!"
+
+        self.min_conjunctions = int(min_conjunctions)
+        self.max_conjunctions = int(max_conjunctions)
+        self.min_levels = int(min_levels)
+        self.max_levels = int(max_levels)
+        self.worst_case_dfa = self._sample(self.max_levels, self.max_levels, self.max_conjunctions, self.max_conjunctions)[0][0]
+        self.n_alphabet = len(self.worst_case_dfa.inputs)
+        self.n_states = 0
+        self.n_accepting_states = 0
+        self.n_transitions = 0
+        for s in self.worst_case_dfa.states():
+            self.n_states += 1
+            self.n_transitions += sum(s != self.worst_case_dfa._transition(s, a) for a in self.worst_case_dfa.inputs)
+            if self.worst_case_dfa._label(s):
+                self.n_accepting_states += 1
+        self.n_transitions = (self.n_transitions//2 + 1)*2
+
+    def sample(self):
+        return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions)
+
+    def _sample(self, min_levels, max_levels, min_conjunctions, max_conjunctions):
+        # Sampling a conjuntion of *n_conjs* (not p[0]) Until (p[1]) formulas of *n_levels* levels
+        n_conjs = random.randint(min_conjunctions, max_conjunctions)
+        p = random.sample(self.propositions,3*max_levels*n_conjs)
+        ltl = None
+        seqs = []
+        b = 0
+        for i in range(n_conjs):
+            n_levels = random.randint(min_levels, max_levels)
+            seq = [(p[b], p[b + 1], p[b + 2])]
+            b += 3
+            for j in range(1, n_levels):
+                seq = [(p[b], p[b + 1], p[b + 2])] + seq
+                b += 3
+            seqs = [tuple(seq)] + seqs
+        seqs = tuple(seqs)
+        def delta(s, c):
+            s, is_in_recovery_mode = s
+            if is_in_recovery_mode:
+                for i in range(len(s)):
+                    if s[i] != () and c == s[i][0][2]: # Fix
+                        return s, False
+            else:
+                for i in range(len(s)):
+                    if s[i] != () and c == s[i][0][0]: # Reach
+                        return s[:i] + (s[i][1:],) + s[i + 1:], False
+                    elif s[i] != () and c == s[i][0][1]: # Avoid
+                        return s, True
+            return s, is_in_recovery_mode
+        return ((DFA(
+            start=(seqs, False),
+            inputs=self.propositions,
+            label=lambda s: s[0] == tuple(tuple() for _ in range(n_conjs)) and not s[1],
+            transition=delta,
+        ),),)
+
+    def get_n_alphabet(self):
+        return self.n_alphabet
+
+    def get_n_states(self):
+        return self.n_states
+
+    def get_n_accepting_states(self):
+        return self.n_accepting_states
+
+    def get_n_transitions(self):
+        return self.n_transitions
+
+    def get_n_conjunctions(self):
+        return 1
+
+    def get_n_disjunctions(self):
+        return 1
+
+class CompositionalParitySampler(DFASampler):
+    def __init__(self, propositions, min_levels=1, max_levels=2, min_conjunctions=1 , max_conjunctions=2):
+        super().__init__(propositions)
+        self.levels       = (int(min_levels), int(max_levels))
+        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
+        assert 3*int(max_levels)*int(max_conjunctions) <= len(propositions), "The domain does not have enough propositions!"
+
+        self.min_conjunctions = int(min_conjunctions)
+        self.max_conjunctions = int(max_conjunctions)
+        self.min_levels = int(min_levels)
+        self.max_levels = int(max_levels)
+        self.worst_case_dfa = self._sample(self.max_levels, self.max_levels, 1, 1)[0][0]
+        self.n_alphabet = len(self.worst_case_dfa.inputs)
+        self.n_states = 0
+        self.n_accepting_states = 0
+        self.n_transitions = 0
+        for s in self.worst_case_dfa.states():
+            self.n_states += 1
+            self.n_transitions += sum(s != self.worst_case_dfa._transition(s, a) for a in self.worst_case_dfa.inputs)
+            if self.worst_case_dfa._label(s):
+                self.n_accepting_states += 1
+        self.n_transitions = (self.n_transitions//2 + 1)*2
+
+    def sample(self):
+        return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions)
+
+    def _sample(self, min_levels, max_levels, min_conjunctions, max_conjunctions):
+        # Sampling a conjuntion of *n_conjs* (not p[0]) Until (p[1]) formulas of *n_levels* levels
+        n_conjs = random.randint(min_conjunctions, max_conjunctions)
+        p = random.sample(self.propositions,3*max_levels*n_conjs)
+        ltl = None
+        seqs = []
+        b = 0
+        for i in range(n_conjs):
+            n_levels = random.randint(min_levels, max_levels)
+            seq = [(p[b], p[b + 1], p[b + 2])]
+            b += 3
+            for j in range(1, n_levels):
+                seq = [(p[b], p[b + 1], p[b + 2])] + seq
+                b += 3
+            seqs = [tuple(seq)] + seqs
+        seqs = tuple(seqs)
+        def delta(s, c):
+            is_in_recovery_mode, s = s
+            if is_in_recovery_mode:
+                if s != () and c == s[0][2]: # Fix
+                    return False, s
+            else:
+                if s != () and c == s[0][0]: # Reach
+                    return False, s[1:]
+                elif s != () and c == s[0][1]: # Avoid
+                    return True, s
+            return is_in_recovery_mode, s
+        dfas = tuple(DFA(start=(False, seq), inputs=self.propositions, label=lambda s: not s[0] and s[1] == tuple(), transition=delta) for seq in seqs)
+        return tuple((dfa,) for dfa in dfas)
+
+    def get_n_alphabet(self):
+        return self.n_alphabet
+
+    def get_n_states(self):
+        return self.n_states
+
+    def get_n_accepting_states(self):
+        return self.n_accepting_states
+
+    def get_n_transitions(self):
+        return self.n_transitions
+
+    def get_n_conjunctions(self):
+        return self.max_conjunctions
+
+    def get_n_disjunctions(self):
+        return 1
+
+    def get_size_bound(self):
+        return self._get_size_bound()*self.max_conjunctions
+
 def getRegisteredSamplers(propositions):
     return [SequenceSampler(propositions),
             UntilTaskSampler(propositions),
@@ -868,6 +1028,10 @@ def getDFASampler(sampler_id, propositions):
     elif ("_JOIN_" in sampler_id): # e.g., Eventually_1_5_1_4_JOIN_Until_1_3_1_2
         sampler_ids = sampler_id.split("_JOIN_")
         return JoinSampler(propositions, sampler_ids)
+    elif (tokens[0] == "Parity"):
+        return ParitySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
+    elif (tokens[0] == "CompositionalParity"):
+        return CompositionalParitySampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
     elif (tokens[0] == "Sequence"):
         return SequenceSampler(propositions, tokens[1], tokens[2])
     elif (tokens[0] == "Until"):
