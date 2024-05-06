@@ -65,12 +65,10 @@ class DFAEnv(gym.Wrapper):
 
         if next_dfa_goal != self.dfa_goal:
             self.dfa_goal = self._minimize(next_dfa_goal)
-            dfa_reward, dfa_done, self.dfa_goal = self.get_dfa_goal_reward_and_done(self.dfa_goal)
+            dfa_reward, dfa_done = self.get_dfa_goal_reward_and_done(self.dfa_goal)
             self.dfa_goal_int_seq = self._to_int_seq(self.dfa_goal)
         else:
             dfa_reward, dfa_done = 0.0, False
-
-        # dfa_reward, dfa_done = self.get_dfa_goal_reward_and_done(self.dfa_goal)
 
         self.obs = next_obs
 
@@ -95,7 +93,7 @@ class DFAEnv(gym.Wrapper):
 
         if next_dfa_goal != dfa_goal:
             next_dfa_goal = self._minimize(next_dfa_goal)
-            dfa_reward, dfa_done, next_dfa_goal = self.get_dfa_goal_reward_and_done(next_dfa_goal)
+            dfa_reward, dfa_done = self.get_dfa_goal_reward_and_done(next_dfa_goal)
             next_dfa_int_seq = np.expand_dims(self._to_int_seq(next_dfa_goal), axis=0)
         else:
             next_dfa_int_seq = dfa_int_seq
@@ -110,24 +108,18 @@ class DFAEnv(gym.Wrapper):
 
     def get_dfa_goal_reward_and_done(self, dfa_goal):
         dfa_clause_rewards = []
-        dfa_clause_dones = []
-        dfa_clause_actives = []
         for dfa_clause in dfa_goal:
-            dfa_clause_reward, dfa_clause_done = self.get_dfa_clause_reward_and_done(dfa_clause)
+            dfa_clause_reward = self.get_dfa_clause_reward_and_done(dfa_clause)
             dfa_clause_rewards.append(dfa_clause_reward)
-            dfa_clause_dones.append(dfa_clause_done)
-            if not dfa_clause_done:
-                dfa_clause_actives.append(dfa_clause)
-        return min(dfa_clause_rewards), all(dfa_clause_dones), tuple(dfa_clause_actives)
+        reward = min(dfa_clause_rewards)
+        return reward, reward != 0
 
     def get_dfa_clause_reward_and_done(self, dfa_clause):
         dfa_rewards = []
-        dfa_dones = []
         for dfa in dfa_clause:
-            dfa_reward, dfa_done = self.get_dfa_reward_and_done(dfa)
+            dfa_reward = self.get_dfa_reward_and_done(dfa)
             dfa_rewards.append(dfa_reward)
-            dfa_dones.append(dfa_done)
-        return max(dfa_rewards), any(dfa_dones)
+        return max(dfa_rewards)
 
     def get_dfa_reward_and_done(self, dfa):
         current_state = dfa.start
@@ -137,15 +129,12 @@ class DFAEnv(gym.Wrapper):
 
         if current_state_label == True: # If starting state of dfa is accepting, then dfa_reward is 1.0.
             dfa_reward = 1.0
-            dfa_done = True
         elif is_current_state_sink: # If starting state of dfa is rejecting and current state is a sink, then dfa_reward is reject_reward.
             dfa_reward = self.reject_reward
-            dfa_done = True
         else:
             dfa_reward = 0.0 # If starting state of dfa is rejecting and self.dfa_goal has a multiple states, then dfa_reward is 0.0.
-            dfa_done = False
 
-        return dfa_reward, dfa_done
+        return dfa_reward
 
     def get_events(self, obs, act, next_obs):
         # This function must return the events that currently hold on the environment
