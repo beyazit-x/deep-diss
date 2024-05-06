@@ -94,6 +94,24 @@ class OrSampler(DFASampler):
         return ('or', getDFASampler(self.sampler_ids[0], self.propositions).sample_ltl_formula(),
                         getDFASampler(self.sampler_ids[1], self.propositions).sample_ltl_formula())
 
+class JoinSampler(DFASampler):
+    def __init__(self, propositions, sampler_ids):
+        super().__init__(propositions)
+        self.n = len(sampler_ids)
+        self.samplers = [getDFASampler(sampler_id, self.propositions) for sampler_id in sampler_ids]
+
+    def sample(self):
+        return random.choice(self.samplers).sample()
+
+    def get_size_bound(self):
+        return max(sampler.get_size_bound() for sampler in self.samplers)
+
+    def get_n_conjunctions(self):
+        return max(sampler.get_n_conjunctions() for sampler in self.samplers)
+
+    def get_n_disjunctions(self):
+        return max(sampler.get_n_disjunctions() for sampler in self.samplers)
+
 # This class generates random LTL formulas using the following template:
 #   ('until',('not','a'),('and', 'b', ('until',('not','c'),'d')))
 # where p1, p2, p3, and p4 are randomly sampled propositions
@@ -847,6 +865,9 @@ def getDFASampler(sampler_id, propositions):
     elif ("_OR_" in sampler_id): # e.g., Sequence_2_4_OR_UntilTask_3_3_1_1
         sampler_ids = sampler_id.split("_OR_")
         return OrSampler(propositions, sampler_ids)
+    elif ("_JOIN_" in sampler_id): # e.g., Eventually_1_5_1_4_JOIN_Until_1_3_1_2
+        sampler_ids = sampler_id.split("_JOIN_")
+        return JoinSampler(propositions, sampler_ids)
     elif (tokens[0] == "Sequence"):
         return SequenceSampler(propositions, tokens[1], tokens[2])
     elif (tokens[0] == "Until"):
