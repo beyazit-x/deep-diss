@@ -41,11 +41,20 @@ class DFASampler():
     def get_n_accepting_states(self):
         raise NotImplemented
 
-    def get_n_alphabet(self):
-        return len(self.propositions) + 1 # +1 is for empty string
-
     def get_n_transitions(self):
         raise NotImplemented
+
+    def get_n_conjunctions(self):
+        raise NotImplemented
+
+    def get_n_disjunctions(self):
+        raise NotImplemented
+
+    def sample(self):
+        raise NotImplemented
+
+    def get_n_alphabet(self):
+        return len(self.propositions)
 
     def get_size_bound(self):
         return self._get_size_bound()
@@ -64,15 +73,6 @@ class DFASampler():
         bin_size = math.ceil(3 + 2*b_Q + 2*b_E + (F + 1)*b_Q + m*(b_E + 2*b_Q) + 1)
         return len(str(2**bin_size - 1))
         # return bin_size
-
-    def get_n_conjunctions(self):
-        raise NotImplemented
-
-    def get_n_disjunctions(self):
-        raise NotImplemented
-
-    def sample(self):
-        raise NotImplemented
 
 # Samples from one of the other samplers at random. The other samplers are sampled by their default args.
 class SuperSampler(DFASampler):
@@ -111,6 +111,162 @@ class DefaultSampler(DFASampler):
 #      etc...
 # The number of until-tasks, their levels, and their propositions are randomly sampled.
 # This code is a generalization of the DefaultSampler---which is equivalent to UntilTaskSampler(propositions, 2, 2, 1, 1)
+class UntilTaskSampler(DFASampler):
+    def __init__(self, propositions, min_levels=1, max_levels=2, min_conjunctions=1 , max_conjunctions=2):
+        super().__init__(propositions)
+        self.levels       = (int(min_levels), int(max_levels))
+        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
+        assert 2*int(max_levels)*int(max_conjunctions) <= len(propositions), "The domain does not have enough propositions!"
+
+        self.min_conjunctions = int(min_conjunctions)
+        self.max_conjunctions = int(max_conjunctions)
+        self.min_levels = int(min_levels)
+        self.max_levels = int(max_levels)
+        self.worst_case_dfa = self._sample(self.max_levels, self.max_levels, self.max_conjunctions, self.max_conjunctions)[0][0]
+        self.n_alphabet = len(self.worst_case_dfa.inputs)
+        self.n_states = 0
+        self.n_accepting_states = 0
+        self.n_transitions = 0
+        for s in self.worst_case_dfa.states():
+            self.n_states += 1
+            self.n_transitions += sum(s != self.worst_case_dfa._transition(s, a) for a in self.worst_case_dfa.inputs)
+            if self.worst_case_dfa._label(s):
+                self.n_accepting_states += 1
+        self.n_transitions = (self.n_transitions//2 + 1)*2
+
+    def sample(self):
+        return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions)
+
+    def _sample(self, min_levels, max_levels, min_conjunctions, max_conjunctions):
+        # Sampling a conjuntion of *n_conjs* (not p[0]) Until (p[1]) formulas of *n_levels* levels
+        n_conjs = random.randint(min_conjunctions, max_conjunctions)
+        p = random.sample(self.propositions,2*max_levels*n_conjs)
+        ltl = None
+        seqs = []
+        b = 0
+        for i in range(n_conjs):
+            n_levels = random.randint(min_levels, max_levels)
+            # Sampling an until task of *n_levels* levels
+            until_task = ('until',('not',p[b]),p[b+1])
+            seq = [(p[b], p[b+1])]
+            b +=2
+            for j in range(1,n_levels):
+                until_task = ('until',('not',p[b]),('and', p[b+1], until_task))
+                seq = [(p[b], p[b+1])] + seq
+                b +=2
+            # Adding the until task to the conjunction of formulas that the agent have to solve
+            if ltl is None: ltl = until_task
+            else:           ltl = ('and',until_task,ltl)
+            seqs = [tuple(seq)] + seqs
+        seqs = tuple(seqs)
+        def delta(s, c):
+            if s is not None:
+                for i in range(len(s)):
+                    if s[i] != () and c != s[i][0][0] and c == s[i][0][1]:
+                        return s[:i] + (s[i][1:],) + s[i + 1:]
+                    elif s[i] != () and c == s[i][0][0]:
+                        return None
+            return s
+        return ((DFA(
+            start=seqs,
+            inputs=self.propositions,
+            label=lambda s: s == tuple(tuple() for _ in range(n_conjs)),
+            transition=delta,
+        ),),)
+
+    def get_n_alphabet(self):
+        return self.n_alphabet
+
+    def get_n_states(self):
+        return self.n_states
+
+    def get_n_accepting_states(self):
+        return self.n_accepting_states
+
+    def get_n_transitions(self):
+        return self.n_transitions
+
+    def get_n_conjunctions(self):
+        return 1
+
+    def get_n_disjunctions(self):
+        return 1
+
+class CompositionalUntilTaskSampler(DFASampler):
+    def __init__(self, propositions, min_levels=1, max_levels=2, min_conjunctions=1 , max_conjunctions=2):
+        super().__init__(propositions)
+        self.levels       = (int(min_levels), int(max_levels))
+        self.conjunctions = (int(min_conjunctions), int(max_conjunctions))
+        assert 2*int(max_levels)*int(max_conjunctions) <= len(propositions), "The domain does not have enough propositions!"
+
+        self.min_conjunctions = int(min_conjunctions)
+        self.max_conjunctions = int(max_conjunctions)
+        self.min_levels = int(min_levels)
+        self.max_levels = int(max_levels)
+        self.worst_case_dfa = self._sample(self.max_levels, self.max_levels, 1, 1)[0][0]
+        self.n_alphabet = len(self.worst_case_dfa.inputs)
+        self.n_states = 0
+        self.n_accepting_states = 0
+        self.n_transitions = 0
+        for s in self.worst_case_dfa.states():
+            self.n_states += 1
+            self.n_transitions += sum(s != self.worst_case_dfa._transition(s, a) for a in self.worst_case_dfa.inputs)
+            if self.worst_case_dfa._label(s):
+                self.n_accepting_states += 1
+        self.n_transitions = (self.n_transitions//2 + 1)*2
+
+    def sample(self):
+        return self._sample(self.min_levels, self.max_levels, self.min_conjunctions, self.max_conjunctions)
+
+    def _sample(self, min_levels, max_levels, min_conjunctions, max_conjunctions):
+        # Sampling a conjuntion of *n_conjs* (not p[0]) Until (p[1]) formulas of *n_levels* levels
+        n_conjs = random.randint(min_conjunctions, max_conjunctions)
+        p = random.sample(self.propositions,2*max_levels*n_conjs)
+        ltl = None
+        seqs = []
+        b = 0
+        for i in range(n_conjs):
+            n_levels = random.randint(min_levels, max_levels)
+            # Sampling an until task of *n_levels* levels
+            until_task = ('until',('not',p[b]),p[b+1])
+            seq = [(p[b], p[b+1])]
+            b +=2
+            for j in range(1,n_levels):
+                until_task = ('until',('not',p[b]),('and', p[b+1], until_task))
+                seq = [(p[b], p[b+1])] + seq
+                b +=2
+            # Adding the until task to the conjunction of formulas that the agent have to solve
+            if ltl is None: ltl = until_task
+            else:           ltl = ('and',until_task,ltl)
+            seqs = [tuple(seq)] + seqs
+        seqs = tuple(seqs)
+        def delta(s, c):
+            if s is not None:
+                if s != () and c != s[0][0] and c == s[0][1]:
+                    return s[1:]
+                elif s != () and c == s[0][0]:
+                    return None
+            return s
+        dfas = tuple(DFA(start=seq, inputs=self.propositions, label=lambda s: s == tuple(), transition=delta) for seq in seqs)
+        return tuple((dfa,) for dfa in dfas)
+
+    def get_n_alphabet(self):
+        return self.n_alphabet
+
+    def get_n_states(self):
+        return self.n_states*self.max_conjunctions
+
+    def get_n_accepting_states(self):
+        return self.n_accepting_states*self.max_conjunctions
+
+    def get_n_transitions(self):
+        return self.n_transitions*self.max_conjunctions
+
+    def get_n_conjunctions(self):
+        return self.max_conjunctions
+
+    def get_n_disjunctions(self):
+        return 1
 
 def _chain(xs, alphabet):
     def transition(s, c):
@@ -695,6 +851,8 @@ def getDFASampler(sampler_id, propositions):
         return SequenceSampler(propositions, tokens[1], tokens[2])
     elif (tokens[0] == "Until"):
         return UntilTaskSampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
+    elif (tokens[0] == "CompositionalUntil"):
+        return CompositionalUntilTaskSampler(propositions, tokens[1], tokens[2], tokens[3], tokens[4])
     elif (tokens[0] == "SuperSampler"):
         return SuperSampler(propositions)
     elif (tokens[0] == "Adversarial"):
