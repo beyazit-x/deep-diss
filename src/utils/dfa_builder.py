@@ -1,11 +1,20 @@
-import dgl
 import ring
-import torch
+import random
 import numpy as np
+
+import dgl
+import torch
 import networkx as nx
+from copy import deepcopy
+from pysat.solvers import Solver
 from dfa import DFA
 from utils.parameters import edge_types, feature_inds
 
+"""
+A class that can take an DFA formula and generate the Abstract Syntax Tree (DFA) of it. This
+code can generate trees in either Networkx or DGL formats. And uses caching to remember recently
+generated trees.
+"""
 class DFABuilder(object):
     def __init__(self, propositions, dfa_n_conjunctions, dfa_n_disjunctions, device=None):
         super(DFABuilder, self).__init__()
@@ -19,28 +28,76 @@ class DFABuilder(object):
     def __ring_key__(self):
         return "DFABuilder"
 
-    def __call__(self, dfa_int_seq):
-        return self._to_graph(dfa_int_seq)
+    def __call__(self, dfa_int_seq, library="dgl"):
+        dfa_goal = self._seq2goal(dfa_int_seq)
+        return self._to_graph(dfa_goal, library)
 
-    def _to_graph(self, dfa_int_seq):
+    def _seq2goal(self, dfa_int_seq):
         l = dfa_int_seq.shape[0]
         dfa_goal_int_seq = dfa_int_seq.reshape(self.dfa_n_conjunctions, self.dfa_n_disjunctions, l//(self.dfa_n_conjunctions*self.dfa_n_disjunctions))
-        nxg_goal = []
-        nxg_goal_or_nodes = []
-        rename_goal = []
+        dfa_goal = []
         for i, dfa_clause_int_seq in enumerate(dfa_goal_int_seq):
-            nxg_clause = []
-            nxg_init_nodes = []
-            rename_clause = []
+            dfa_clause = []
             for j, dfa_int_seq in enumerate(dfa_clause_int_seq):
                 dfa_int_str = "".join(str(int(i)) for i in dfa_int_seq.tolist())
                 dfa_int = int(dfa_int_str)
                 # dfa_int = int(dfa_int_str, 2)
                 if dfa_int > 0:
-                    nxg, init_node = self.dfa_int2nxg(dfa_int)
-                    nxg_clause.append(nxg)
-                    rename_clause.append(str(j) + "_")
-                    nxg_init_nodes.append(str(j) + "_" + init_node)
+                    dfa = DFA.from_int(dfa_int, self.propositions)
+                    dfa_clause.append(dfa)
+            dfa_goal.append(tuple(dfa_clause))
+        return dfa_goal
+
+    def _to_graph(self, dfa_goal, library="dgl"):
+        return self._to_graph_one_layer(dfa_goal, library)
+
+    # @ring.lru(maxsize=400000)
+    def _to_graph_one_layer(self, dfa_goal, library="dgl"):
+        nxg_goal = []
+        rename_goal = []
+        nxg_init_nodes = []
+        for i, dfa_clause in enumerate(dfa_goal):
+            for _, dfa in enumerate(dfa_clause):
+                nxg, init_node = self.dfa_to_formatted_nxg(dfa)
+                nxg_goal.append(nxg)
+                rename_goal.append(str(i) + "_")
+                nxg_init_nodes.append(str(i) + "_" + init_node)
+
+        if nxg_goal != []:
+            composed_nxg_goal = nx.union_all(nxg_goal, rename=rename_goal)
+        else:
+            composed_nxg_goal = nx.DiGraph()
+
+        and_node = "AND"
+        composed_nxg_goal.add_node(and_node, feat=np.array([[0.0] * self.feature_size]))
+        nx.set_node_attributes(composed_nxg_goal, np.array([0.0]), "is_root")
+        composed_nxg_goal.nodes[and_node]["is_root"] = np.array([1.0])
+        composed_nxg_goal.nodes[and_node]["feat"][0][feature_inds["AND"]] = 1.0
+
+        for init_node in nxg_init_nodes:
+            composed_nxg_goal.add_edge(init_node, and_node, type=edge_types["AND"])
+
+        for node in composed_nxg_goal.nodes:
+            composed_nxg_goal.add_edge(node, node, type=edge_types["self"])
+
+        nxg = composed_nxg_goal
+
+        return self._get_dgl_graph(nxg)
+
+    # @ring.lru(maxsize=400000)
+    def _to_graph_two_layers(self, dfa_goal, library="dgl"):
+        nxg_goal = []
+        nxg_goal_or_nodes = []
+        rename_goal = []
+        for i, dfa_clause in enumerate(dfa_goal):
+            nxg_clause = []
+            nxg_init_nodes = []
+            rename_clause = []
+            for j, dfa in enumerate(dfa_clause):
+                nxg, init_node = self.dfa_to_formatted_nxg(dfa)
+                nxg_clause.append(nxg)
+                rename_clause.append(str(j) + "_")
+                nxg_init_nodes.append(str(j) + "_" + init_node)
 
             if nxg_clause != []:
                 composed_nxg_clause = nx.union_all(nxg_clause, rename=rename_clause)
@@ -69,7 +126,7 @@ class DFABuilder(object):
 
         for node in composed_nxg_goal.nodes:
             composed_nxg_goal.add_edge(node, node, type=edge_types["self"])
-        
+
         nxg = composed_nxg_goal
 
         return self._get_dgl_graph(nxg)
@@ -89,13 +146,40 @@ class DFABuilder(object):
         _feat = torch.from_numpy(np.array(_feat))
         _is_root = torch.from_numpy(np.array(_is_root))
 
-        g = dgl.graph((U, V), device=self.device)
+        g = dgl.graph((U, V))
         g.ndata["feat"] = _feat
         g.ndata["is_root"] = _is_root
         g.edata["type"] = _type
 
+        # g.ndata["PE"] = dgl.lap_pe(g, k=2, padding=True)
+        # g.ndata["PE"] = dgl.random_walk_pe(g, k=2)
+
         return g
 
+    def min_distance_to_accept_by_state_normalized(self, dfa, state):
+        from dfa.utils import min_distance_to_accept_by_state
+        depths = min_distance_to_accept_by_state(dfa)
+        if state in depths:
+            return depths[state]/100.0
+        return 1.0
+
+    def _unroll_dfa_loops(self, d, k=2):
+        def transition(s, c):
+            s, counts = s
+            counts = dict(counts)
+            visit_count = counts.get(s, 0)
+            if visit_count >= k:
+                return (s, tuple(counts.items()))
+            counts[s] = 1 + visit_count
+            return (d._transition(s, c), tuple(counts.items()))
+        return DFA(
+                start=(d.start, ()),
+                label=lambda s: d._label(s[0]),
+                transition=transition,
+                inputs=d.inputs
+            )
+
+    @ring.lru(maxsize=1000000)
     def dfa_to_formatted_nxg(self, dfa):
 
         nxg = nx.DiGraph()
@@ -107,6 +191,8 @@ class DFABuilder(object):
             nxg.add_node(start)
             nxg.nodes[start]["feat"] = np.array([[0.0] * self.feature_size])
             nxg.nodes[start]["feat"][0][feature_inds["normal"]] = 1.0
+            # Assumption: We never do more than chain length 7-8 so deviding by 100 is safe.
+            # nxg.nodes[start]["feat"][0][feature_inds["distance_normalized"]] = self.min_distance_to_accept_by_state_normalized(dfa, s)
             if dfa._label(s): # is accepting?
                 nxg.nodes[start]["feat"][0][feature_inds["accepting"]] = 1.0
             elif sum(s != dfa._transition(s, a) for a in dfa.inputs) == 0: # is rejecting?
@@ -133,12 +219,6 @@ class DFABuilder(object):
 
         return nxg, init_node
 
-    @ring.lru(maxsize=100000)
-    def dfa_int2nxg(self, dfa_int):
-        dfa = DFA.from_int(dfa_int, self.propositions)
-        nxg, init_node = self.dfa_to_formatted_nxg(dfa)
-        return nxg, init_node
-
 def draw(G, formula):
     from networkx.drawing.nx_agraph import graphviz_layout
     import matplotlib.pyplot as plt
@@ -153,3 +233,34 @@ def draw(G, formula):
     nx.draw(G, pos, with_labels=True, arrows=True, node_shape='s', edgelist=list(nx.get_edge_attributes(G,'type')), node_size=500, node_color="white", edge_color=edge_color) #edge_color=edge_color
     plt.show()
 
+"""
+A simple test to check if the DFABuilder works fine. We do a preorder DFS traversal of the resulting
+tree and convert it to a simplified formula and compare the result with the simplified version of the
+original formula. They should match.
+"""
+if __name__ == '__main__':
+    import re
+    import sys
+    import itertools
+    import matplotlib.pyplot as plt
+
+    sys.path.insert(0, '../../')
+    from dfa_samplers import getDFASampler
+
+    for sampler_id, _ in itertools.product(["Default", "Sequence_2_20"], range(20)):
+        props = "abcdefghijklmnopqrst"
+        sampler = getDFASampler(sampler_id, props)
+        builder = DFABuilder(list(set(list(props))))
+        formula = sampler.sample()
+        tree = builder(formula, library="networkx")
+        pre = list(nx.dfs_preorder_nodes(tree, source=0))
+        draw(tree, formula)
+        u_tree = tree.to_undirected()
+        pre = list(nx.dfs_preorder_nodes(u_tree, source=0))
+
+        original = re.sub('[,\')(]', '', str(formula))
+        observed = " ".join([u_tree.nodes[i]["token"] for i in pre])
+
+        assert original == observed, f"Test Faield: Expected: {original}, Got: {observed}"
+
+    print("Test Passed!")

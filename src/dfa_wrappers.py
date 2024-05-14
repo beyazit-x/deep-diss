@@ -1,20 +1,19 @@
 import numpy as np
 import gym
 from gym import spaces
-from copy import deepcopy
 import random
-import dfa_samplers
-# from envs.safety.zones_env import zone
-import networkx as nx
-import pickle
-from dfa import DFA
-import math
+from dfa_samplers import getDFASampler
+from dfa.utils import min_distance_to_accept_by_state
+from functools import reduce
+import operator as OP
 
 class DFAEnv(gym.Wrapper):
     def __init__(self, env, dfa_sampler=None, reject_reward=-1):
         super().__init__(env)
         self.propositions = self.env.get_propositions()
-        self.sampler = dfa_samplers.getDFASampler(dfa_sampler, self.propositions)
+        self.sampler = getDFASampler(dfa_sampler, self.propositions)
+
+        self.max_depth = 1_000_000
 
         self.N = self.sampler.get_size_bound()
         self.dfa_n_conjunctions = self.sampler.get_n_conjunctions()
@@ -32,24 +31,6 @@ class DFAEnv(gym.Wrapper):
 
         self.reject_reward = reject_reward
 
-    def _to_int_seq(self, dfa_goal):
-        seqs = []
-        for dfa_clause in dfa_goal:
-            for dfa in dfa_clause:
-                seqs.append(self.get_int_seq(dfa.to_int()))
-            for _ in range(self.dfa_n_disjunctions - len(dfa_clause)):
-                seqs.append(np.zeros(self.per_dfa_int_seq_size))
-        for _ in range(self.dfa_n_conjunctions - len(dfa_goal)):
-            for _ in range(self.dfa_n_disjunctions):
-                seqs.append(np.zeros(self.per_dfa_int_seq_size))
-        return np.concatenate(seqs)
-
-    def _advance(self, dfa_goal, truth_assignment):
-        return tuple(tuple(dfa.advance(truth_assignment) for dfa in dfa_clause) for dfa_clause in dfa_goal)
-
-    def _minimize(self, dfa_goal):
-        return tuple(tuple(dfa.minimize() for dfa in dfa_clause) for dfa_clause in dfa_goal)
-
     def reset(self):
         self.obs = self.env.reset()
         self.dfa_goal = self.sampler.sample()
@@ -58,88 +39,82 @@ class DFAEnv(gym.Wrapper):
         return dfa_obs
 
     def step(self, action):
+        # executing the action in the environment
         next_obs, original_reward, env_done, info = self.env.step(action)
 
-        truth_assignment = self.get_events(self.obs, action, next_obs)
-        next_dfa_goal = self._advance(self.dfa_goal, truth_assignment)
+        # progressing the DFA formula
+        truth_assignment = self.get_events()
 
-        if next_dfa_goal != self.dfa_goal:
-            self.dfa_goal = self._minimize(next_dfa_goal)
-            dfa_reward, dfa_done = self.get_dfa_goal_reward_and_done(self.dfa_goal)
+        old_dfa_goal = self.dfa_goal
+        self.dfa_goal = self._advance(self.dfa_goal, truth_assignment)
+        self.obs      = next_obs
+
+        if old_dfa_goal != self.dfa_goal:
+            dfa_reward, dfa_done = self.get_dfa_reward(old_dfa_goal, self.dfa_goal)
+            # dfa_reward, dfa_done = self.get_depth_reward(old_dfa_goal, self.dfa_goal)
             self.dfa_goal_int_seq = self._to_int_seq(self.dfa_goal)
         else:
             dfa_reward, dfa_done = 0.0, False
-
-        self.obs = next_obs
 
         dfa_obs = {"features": self.obs, "dfa": self.dfa_goal_int_seq}
 
         reward  = original_reward + dfa_reward
         done    = env_done or dfa_done
 
+        assert dfa_reward >= -1 and dfa_reward <= 1
+        assert dfa_reward !=  1 or dfa_done
+        assert dfa_reward != -1 or dfa_done
+        assert (dfa_reward <=  -1 or dfa_reward >= 1) or not dfa_done
+
         return dfa_obs, reward, done, info
 
-
     def step_given_obs(self, obs, action, time):
+        raise NotImplemented
 
-        # advance the environment
-        next_feature, original_reward, env_done, info = self.env.step_from_obs(obs["features"], action, time)
+    def _to_monolithic_dfa(self, dfa_goal):
+        return reduce(OP.and_, map(lambda dfa_clause: reduce(OP.or_, dfa_clause), dfa_goal))
 
-        # advance the dfa
-        dfa_int_seq = obs["dfa"]
-        dfa_goal = self._from_int_seq(dfa_int_seq)
-        truth_assignment = self.env.get_events_given_obs(next_feature)
-        next_dfa_goal = self._advance(dfa_goal, truth_assignment)
+    def get_dfa_reward(self, old_dfa_goal, dfa_goal):
+        mono_dfa = self._to_monolithic_dfa(dfa_goal)
+        if mono_dfa._label(mono_dfa.start):
+            return 1.0, True
+        if mono_dfa.find_word() is None:
+            return -1.0, True
+        return 0.0, False
 
-        if next_dfa_goal != dfa_goal:
-            next_dfa_goal = self._minimize(next_dfa_goal)
-            dfa_reward, dfa_done = self.get_dfa_goal_reward_and_done(next_dfa_goal)
-            next_dfa_int_seq = np.expand_dims(self._to_int_seq(next_dfa_goal), axis=0)
-        else:
-            next_dfa_int_seq = dfa_int_seq
-            dfa_reward, dfa_done = 0.0, False
+    def min_distance_to_accept_by_state(self, dfa, state):
+        depths = min_distance_to_accept_by_state(dfa)
+        if state in depths:
+            return depths[state]
+        return self.max_depth
 
-        next_obs = {"features": next_feature, "dfa": next_dfa_int_seq}
+    def get_depth_reward(self, old_dfa_goal, dfa_goal):
+        old_dfa = self._to_monolithic_dfa(old_dfa_goal).minimize()
+        dfa = self._to_monolithic_dfa(dfa_goal).minimize()
 
-        reward  = original_reward + dfa_reward
-        done    = env_done or dfa_done
+        if dfa._label(dfa.start):
+            return 1.0, True
+        old_depth = self.min_distance_to_accept_by_state(old_dfa, old_dfa.start)
+        depth = self.min_distance_to_accept_by_state(dfa, dfa.start)
+        if depth == self.max_depth:
+            return -1.0, True
+        depth_reward = (old_depth - depth)/self.max_depth
+        if depth_reward < 0:
+            depth_reward *= 1_000
+        if depth_reward > 1:
+            return 1, True
+        elif depth_reward < -1:
+            return -1, True
+        return depth_reward, False
 
-        return next_obs, reward, done, info
+    def _advance(self, dfa_goal, truth_assignment):
+        return tuple(tuple(dfa.advance(truth_assignment).minimize() for dfa in dfa_clause) for dfa_clause in dfa_goal)
 
-    def get_dfa_goal_reward_and_done(self, dfa_goal):
-        dfa_clause_rewards = []
-        for dfa_clause in dfa_goal:
-            dfa_clause_reward = self.get_dfa_clause_reward_and_done(dfa_clause)
-            dfa_clause_rewards.append(dfa_clause_reward)
-        reward = min(dfa_clause_rewards)
-        return reward, reward != 0
-
-    def get_dfa_clause_reward_and_done(self, dfa_clause):
-        dfa_rewards = []
-        for dfa in dfa_clause:
-            dfa_reward = self.get_dfa_reward_and_done(dfa)
-            dfa_rewards.append(dfa_reward)
-        return max(dfa_rewards)
-
-    def get_dfa_reward_and_done(self, dfa):
-        current_state = dfa.start
-        current_state_label = dfa._label(current_state)
-        states = dfa.states()
-        is_current_state_sink = sum(current_state != dfa._transition(current_state, a) for a in dfa.inputs) == 0
-
-        if current_state_label == True: # If starting state of dfa is accepting, then dfa_reward is 1.0.
-            dfa_reward = 1.0
-        elif is_current_state_sink: # If starting state of dfa is rejecting and current state is a sink, then dfa_reward is reject_reward.
-            dfa_reward = self.reject_reward
-        else:
-            dfa_reward = 0.0 # If starting state of dfa is rejecting and self.dfa_goal has a multiple states, then dfa_reward is 0.0.
-
-        return dfa_reward
-
-    def get_events(self, obs, act, next_obs):
-        # This function must return the events that currently hold on the environment
-        # NOTE: The events are represented by a string containing the propositions with positive values only (e.g., "ac" means that only propositions "a" and "b" hold)
+    def get_events(self):
         return self.env.get_events()
+
+    def get_propositions(self):
+        return self.env.get_propositions()
 
     def get_int_seq(self, dfa_int):
         int_seq = np.array([int(i) for i in str(dfa_int)])
@@ -156,3 +131,40 @@ class DFAEnv(gym.Wrapper):
     def _from_int_seq(self, dfa_int_seq):
         return tuple(tuple(self.get_dfa_from_int_seq(dfa_int_seq) for dfa_int_seq in dfa_clause_int_seq) for dfa_clause_int_seq in dfa_int_seq.view(self.dfa_n_conjunctions, self.dfa_n_disjunctions, self.per_dfa_int_seq_size))
 
+    def _to_int_seq(self, dfa_goal):
+        seqs = []
+        for dfa_clause in dfa_goal:
+            for dfa in dfa_clause:
+                seqs.append(self.get_int_seq(dfa.to_int()))
+            for _ in range(self.dfa_n_disjunctions - len(dfa_clause)):
+                seqs.append(np.zeros(self.per_dfa_int_seq_size))
+        for _ in range(self.dfa_n_conjunctions - len(dfa_goal)):
+            for _ in range(self.dfa_n_disjunctions):
+                seqs.append(np.zeros(self.per_dfa_int_seq_size))
+        return np.concatenate(seqs)
+
+class NoDFAWrapper(gym.Wrapper):
+    def __init__(self, env):
+        """
+        Removes the DFA formula from an DFAEnv
+        It is useful to check the performance of off-the-shelf agents
+        """
+        super().__init__(env)
+        self.observation_space = env.observation_space
+        # self.observation_space =  env.observation_space['features']
+
+    def reset(self):
+        obs = self.env.reset()
+        # obs = obs['features']
+        # obs = {'features': obs}
+        return obs
+
+    def step(self, action):
+        # executing the action in the environment
+        obs, reward, done, info = self.env.step(action)
+        # obs = obs['features']
+        # obs = {'features': obs}
+        return obs, reward, done, info
+
+    def get_propositions(self):
+        return list([])

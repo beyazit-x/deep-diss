@@ -8,6 +8,7 @@ dill==0.3.6
 networkx==2.8.7
 python-sat==0.1.7.dev19
 pythomata==0.3.2
-dfa==4.6
+dfa==4.7.1
 torch==1.13.0
 stable-baselines3==1.6.2
+
